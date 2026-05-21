@@ -4,7 +4,7 @@
 
 原始数据由两类文件组成：pickdata1（资源变更记录，33字段）和pickdata2（用户行为事件记录，52字段）。由于数据量庞大（总计约600万行），采用分块读取策略（chunksize=200,000）进行处理。
 
-特征工程流程为：首先按account\_id聚合，提取每名玩家的基本画像特征（注册时间、最后活跃时间、国家、渠道等）；然后从资源变更记录中计算各类资源（粮食、木材、矿石、金币、钻石）的获取量与消耗量；从行为事件记录中提取付费信息（total\_pay）、联盟参与状态（league\_name）、VIP等级等关键字段。最终构建包含39个特征的玩家级特征表。
+\textbf{特征窗口约束。}问题1要求基于前3天行为预测30天留存，因此严格限定仅使用第1--3天的数据。Day1定义为玩家注册日期（register\_time），若缺失则以首次pickdata2记录日期替代。提取的15个前3天特征包括：登录天数（days\_logged\_d3）、第3天等级（level\_d3）、等级变化（level\_change\_d3）、日均在线时长（avg\_duration\_d3）、各类资源消耗量（food/wood/stone/diamond/coins\_reduce\_d3）、第3天钻石余额（diamond\_d3）与金币余额（gold\_d3）、是否首充（is\_pay\_d3，由first\_pay\_time $\leq$ Day3判定）、是否入盟（is\_league\_d3）及事件类型数（n\_event\_types\_d3）。\textbf{绝对排除}以下全周期变量以避免未来信息泄漏：lifecycle\_days、level\_end、total\_pay、vip\_level\_max、total\_records、diamond\_median。
 
 \subsection{Kaplan-Meier留存率分析}
 
@@ -23,10 +23,10 @@ Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数
 KM留存曲线如图\ref{fig:p1_km}所示。计算得到各级留存率如下：
 
 \begin{itemize}
-    \item 次日留存率（$R_1$）：\textbf{42.35\%}
-    \item 7日留存率（$R_7$）：\textbf{22.98\%}
-    \item 14日留存率（$R_{14}$）：\textbf{16.24\%}
-    \item 30日留存率（$R_{30}$）：\textbf{7.58\%}
+    \item 次日留存率（$R_1$）：\textbf{33.55\%}
+    \item 7日留存率（$R_7$）：\textbf{6.30\%}
+    \item 14日留存率（$R_{14}$）：\textbf{2.65\%}
+    \item 30日留存率（$R_{30}$）：\textbf{0.85\%}
 \end{itemize}
 
 中位生存时间仅为\textbf{1天}，表明超过半数的玩家在注册后24小时内流失，该游戏面临严重的早期留存危机。
@@ -55,9 +55,9 @@ h(t) = \frac{\text{在}t\text{时刻流失的玩家数}}{\text{在}t\text{时刻
 风险函数图见图\ref{fig:p1_hazard}。分析结果明确显示：
 
 \begin{itemize}
-    \item \textbf{第2天}是最关键的流失高峰，54.0\%的剩余用户在此流失
-    \item 第3天为次关键节点，流失率为29.9\%
-    \item 第4--6天流失率持续下降但仍较高
+    \item \textbf{第2天}是最关键的流失高峰，66.5\%的剩余用户在此流失
+    \item 第3天为次关键节点，流失率为32.6\%
+    \item 第4--5天流失率仍超过25\%，第7天再次出现小高峰
 \end{itemize}
 
 这一发现提示运营团队应将最核心的留存干预资源集中在注册后的前48小时内。
@@ -74,8 +74,8 @@ h(t) = \frac{\text{在}t\text{时刻流失的玩家数}}{\text{在}t\text{时刻
 为探究不同玩家群体的留存差异，将玩家按付费状态和联盟参与状态分别进行分层KM分析。结果如图\ref{fig:p1_seg}所示，对比极为显著：
 
 \begin{itemize}
-    \item \textbf{付费玩家} 7日留存率 \textbf{68.0\%} $\quad$ vs $\quad$ \textbf{非付费玩家} 7日留存率 \textbf{21.2\%}（差距3.2倍）
-    \item \textbf{加联盟玩家} 7日留存率 \textbf{61.6\%} $\quad$ vs $\quad$ \textbf{未加联盟玩家} 7日留存率 \textbf{13.4\%}（差距4.6倍）
+    \item \textbf{前3天付费玩家} 7日留存率 \textbf{40.6\%} $\quad$ vs $\quad$ \textbf{非付费玩家} 7日留存率 \textbf{5.2\%}（差距7.8倍）
+    \item \textbf{前3天入盟玩家} 7日留存率 \textbf{28.0\%} $\quad$ vs $\quad$ \textbf{未入盟玩家} 7日留存率 \textbf{1.2\%}（差距23倍）
 \end{itemize}
 
 Log-rank检验结果表明两组差异均具有高度统计显著性（$p < 0.001$）。这一发现具有重要的策略含义：引导新玩家尽早完成首充并加入联盟，是提升整体留存率的最有效杠杆。
@@ -99,15 +99,15 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 
 其中$h_0(t)$为基准风险函数，$X = (X_1, \ldots, X_k)$为协变量向量，$\beta_k$为回归系数。$\exp(\beta_k) > 1$表示该特征增加流失风险（``风险因子''），$\exp(\beta_k) < 1$表示该特征降低流失风险（``保护因子''）。
 
-选取17个表征前3天行为的特征，包括：日均活跃度、等级增长速度、是否付费、是否加联盟、各资源日均消耗量（粮食、木材、矿石、钻石、金币）、资源平衡比（粮食、木材、矿石）、对数化总付费、对数化钻石存量、对数化在线时长、事件类型数与VIP等级。
+选取14个严格限定于前3天的特征：登录天数、第3天等级、等级变化、日均在线时长、各类资源消耗量、钻石/金币余额、是否首充、是否入盟及事件类型数。与前一版本使用的全周期特征形成对比，修复了信息泄漏问题。
 
 \subsubsection{模型训练与评估}
 
 将数据集按7:3分层划分为训练集和测试集。采用惩罚似然估计（penalizer=0.1）降低过拟合风险。模型评估指标：
 
 \begin{itemize}
-    \item 一致性指数（C-index）：\textbf{0.9479}（接近1表示判别能力优秀）
-    \item 预测平均绝对误差（MAE）：\textbf{5.03天}
+    \item 一致性指数（C-index）：\textbf{0.8986}（修复信息泄漏后，模型仍保持了良好的判别能力）
+    \item 预测平均绝对误差（MAE）：\textbf{1.33天}（较前版的5.03天大幅改善，因修正流失定义后多数玩家在数天内快速流失）
 \end{itemize}
 
 \subsubsection{特征重要性分析}
@@ -117,19 +117,20 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \begin{itemize}
     \item \textbf{最强保护因子}（$\exp(\beta) < 1$，降低流失风险）：
     \begin{itemize}
-        \item 事件类型数（n\_event\_types）：$\beta = -0.63$，$p < 0.001$\\
-        行为多样性是留存的最强信号——参与多种游戏活动的玩家更难流失
-        \item 对数化在线时长（log\_duration\_times）：$\beta = -0.41$，$p < 0.001$
-        \item 对数化钻石存量（log\_diamond\_median）：$\beta = -0.37$，$p < 0.001$\\
-        钻石作为稀缺货币的持有量直接反映玩家投入深度
+        \item 事件类型数（n\_event\_types\_d3）：$\beta = -0.43$，$p < 0.001$\\
+        前3天内参与的游戏活动种类越多，流失风险越低——行为多样性是留存的最强信号
+        \item 钻石余额（diamond\_d3）：$\beta = -0.18$，$p < 0.001$\\
+        第3天钻石存量高的玩家投入更深，流失风险更低
+        \item 登录天数（days\_logged\_d3）：$\beta = -0.17$，$p < 0.001$\\
+        前3天每日登录的玩家具有显著更高的留存概率
     \end{itemize}
     \item \textbf{最强风险因子}（$\exp(\beta) > 1$，增加流失风险）：
     \begin{itemize}
-        \item 日均活跃度（daily\_activity\_rate）：$\beta = +0.57$，$p < 0.001$\\
-        这一看似反直觉的结果实际上反映了``最后狂欢''效应——\\
-        短期内高强度活动往往是流失前兆
-        \item 等级增长速度（level\_velocity）：$\beta = +0.39$，$p < 0.001$
+        \item 金币余额（gold\_d3）：$\beta = +0.08$，$p = 0.01$\\
+        金币是基础货币，存量高可能说明玩家尚未找到有效的资源消耗出口
+        \item 矿石消耗量（stone\_reduce\_d3）：$\beta = +0.02$，$p = 0.81$（不显著）
     \end{itemize}
+    与前版（使用全周期特征，C-index=0.9479）相比，修复信息泄漏后D3模型的系数结构发生了显著变化。前版的``最后狂欢''效应（日均活跃度$\beta=+0.57$）在纯前3天特征中不再出现，支持了该效应是信息泄漏伪影的假说。
 \end{itemize}
 
 \begin{figure}[H]

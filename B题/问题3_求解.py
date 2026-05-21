@@ -97,18 +97,41 @@ def player_clustering(df):
             'retention_7d': (sub['lifecycle_days']>=7).mean()*100,
             'retention_30d': (sub['lifecycle_days']>=30).mean()*100,
         }
-        if profile['pay_rate'] < 1 and profile['mean_lifecycle'] < 5:
-            name_cn, name_en = '零氪休闲党', 'F2P Casual'
-        elif profile['pay_rate'] < 20 and profile['mean_lifecycle'] < 15:
-            name_cn, name_en = '微氪月卡党', 'Light Spender'
-        elif profile['pay_rate'] >= 20 and profile['mean_pay'] < 50:
-            name_cn, name_en = '中氪战力党', 'Mid Spender'
-        else:
-            name_cn, name_en = '高氪核心党', 'Whale'
-        profile['name_cn'] = name_cn
-        profile['name_en'] = name_en
+        # Will be filled after all clusters are profiled (sorting-based naming)
+        profile['name_cn'] = f'Cluster{c}'
+        profile['name_en'] = f'Cluster{c}'
         cluster_profiles.append(profile)
-        print(f'    C{c} ({name_cn}): n={len(sub)}, pay={profile["pay_rate"]:.1f}%, life={profile["mean_lifecycle"]:.1f}d')
+
+    # ── Sorting-based naming ──
+    # Sort by mean_pay descending; highest paying = 高氪核心党
+    sorted_by_pay = sorted(cluster_profiles, key=lambda x: x['mean_pay'], reverse=True)
+    for rank, cp in enumerate(sorted_by_pay):
+        if cp['mean_pay'] > 0 and rank == 0:
+            cp['name_cn'] = '高氪核心党'; cp['name_en'] = 'Whale'
+        elif cp['mean_pay'] > 0:
+            cp['name_cn'] = '中氪战力党'; cp['name_en'] = 'Mid Spender'
+        elif cp['pay_rate'] > 0:
+            cp['name_cn'] = '微氪月卡党'; cp['name_en'] = 'Light Spender'
+        elif cp['mean_lifecycle'] >= 10:
+            cp['name_cn'] = '零氪休闲党'; cp['name_en'] = 'F2P Casual'
+        else:
+            cp['name_cn'] = '零氪流失党'; cp['name_en'] = 'F2P Churner'
+
+    # Print and save
+    for cp in cluster_profiles:
+        print(f'    C{cp["cluster"]} ({cp["name_cn"]}): n={cp["n"]}, pay={cp["pay_rate"]:.1f}%, life={cp["mean_lifecycle"]:.1f}d')
+
+    # Save name map
+    import csv
+    map_path = os.path.join(os.path.dirname(__file__), 'data', 'cluster_name_map.csv')
+    with open(map_path, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['cluster_id', 'name_cn', 'name_en', 'mean_pay', 'pay_rate', 'mean_lifecycle', 'mean_level', 'league_rate'])
+        for cp in cluster_profiles:
+            w.writerow([cp['cluster'], cp['name_cn'], cp['name_en'],
+                   f"{cp['mean_pay']:.2f}", f"{cp['pay_rate']:.1f}",
+                   f"{cp['mean_lifecycle']:.1f}", f"{cp['mean_level']:.1f}", f"{cp['league_rate']:.1f}"])
+    print(f'  Name map saved to {map_path}')
 
     # Bilingual elbow + silhouette
     for lang, fig_dir in LANGS:
@@ -168,10 +191,41 @@ def player_clustering(df):
     return cluster_profiles, df
 
 
-def monte_carlo_simulation(cluster_profiles, df):
-    """Monte Carlo simulation with bilingual output."""
+def estimate_demand_curves(cluster_profiles, df):
+    """Estimate demand curves: shared beta, stratified alpha_c."""
     print('\n' + '=' * 50)
-    print('3.3 Monte Carlo Simulation')
+    print('3.3 Demand Curve Estimation')
+    print('=' * 50)
+
+    # From historical data: fit f(p) = alpha * exp(-beta * p)
+    # Using observed purchase amounts as proxy for "willingness to pay"
+    payers = df[df['total_pay'] > 0]
+    pay_amounts = payers['total_pay'].values
+
+    # Fit beta from all payers (shared price sensitivity)
+    # Using the exponential distribution MLE: beta = 1 / mean(pay)
+    beta_hat = 1.0 / max(0.01, pay_amounts.mean())
+    print(f'  Shared beta (price sensitivity): {beta_hat:.6f}')
+
+    # Stratified alpha_c per cluster
+    prices = np.array([6, 12, 18, 30, 68, 128, 328])
+    demand = {}
+    for c, cp in enumerate(cluster_profiles):
+        alpha_c = max(0.001, cp['pay_rate'] / 100.0)
+        demand[c] = {
+            'alpha': alpha_c,
+            'beta': beta_hat,
+            'curve': lambda p, a=alpha_c, b=beta_hat: a * np.exp(-b * p),
+        }
+        print(f'  Cluster {c} ({cp["name_cn"]}): alpha={alpha_c:.4f}')
+
+    return demand, beta_hat
+
+
+def monte_carlo_conservative(cluster_profiles, df):
+    """Conservative scheme: based on historical pay rates, no intervention boost."""
+    print('\n' + '=' * 50)
+    print('3.4 Conservative Scheme MC')
     print('=' * 50)
 
     np.random.seed(RANDOM_SEED)
@@ -182,7 +236,6 @@ def monte_carlo_simulation(cluster_profiles, df):
         cluster_sizes.append(n)
     cluster_sizes[-1] += N_SIM_PLAYERS - sum(cluster_sizes)
 
-    # Historical distributions per cluster
     cluster_dists = {}
     for c, cp in enumerate(cluster_profiles):
         sub = df[df['cluster'] == c]
@@ -194,51 +247,105 @@ def monte_carlo_simulation(cluster_profiles, df):
             'retention_base': cp['retention_30d']/100,
         }
 
-    # Strategy parameters: gift packs per cluster
     gift_packs = [
-        {'name_cn': '首充礼包', 'name_en': 'First Purchase Pack', 'price': 6, 'prob_mult': 1.0, 'ret_boost': 0.02},
-        {'name_cn': '资源补给包', 'name_en': 'Resource Supply Pack', 'price': 30, 'prob_mult': 0.4, 'ret_boost': 0.03},
-        {'name_cn': '成长加速包', 'name_en': 'Growth Accelerator', 'price': 68, 'prob_mult': 0.15, 'ret_boost': 0.04},
-        {'name_cn': '战力突破包', 'name_en': 'Power Breakthrough', 'price': 128, 'prob_mult': 0.05, 'ret_boost': 0.05},
-        {'name_cn': '至尊大礼包', 'name_en': 'Ultimate Pack', 'price': 328, 'prob_mult': 0.01, 'ret_boost': 0.06},
+        {'price': 6, 'prob_mult': 1.0, 'ret_boost': 0.02},
+        {'price': 30, 'prob_mult': 0.4, 'ret_boost': 0.03},
+        {'price': 68, 'prob_mult': 0.15, 'ret_boost': 0.04},
+        {'price': 128, 'prob_mult': 0.05, 'ret_boost': 0.05},
+        {'price': 328, 'prob_mult': 0.01, 'ret_boost': 0.06},
     ]
 
-    # Run simulation
     sim_revenues, sim_retentions = [], []
     for sim_idx in range(N_MC_SIMS):
         if sim_idx % 1000 == 0 and sim_idx > 0:
             print(f'  Progress: {sim_idx}/{N_MC_SIMS}')
-
-        total_revenue = 0
-        retained = 0
-
+        total_revenue, retained = 0, 0
         for c, (cp, n_players) in enumerate(zip(cluster_profiles, cluster_sizes)):
             cd = cluster_dists[c]
             base_pay_prob = cd['pay_rate']
-
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
                 ret_base = np.random.random() < cd['retention_base']
-
-                # Organic payment
-                organic_pay = 0
-                if np.random.random() < base_pay_prob:
-                    organic_pay = np.random.exponential(cd['mean_pay'])
-
-                # Strategy-driven payment
-                strategy_rev = 0
-                strategy_ret_boost = 0
+                organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < base_pay_prob else 0
+                strategy_rev, strategy_ret_boost = 0, 0
                 for gp in gift_packs:
-                    prob = max(0.0005, base_pay_prob * gp['prob_mult'])
-                    if np.random.random() < prob:
+                    if np.random.random() < max(0.0005, base_pay_prob * gp['prob_mult']):
                         strategy_rev += gp['price']
                         strategy_ret_boost += gp['ret_boost']
-
                 total_revenue += organic_pay + strategy_rev
-                final_ret = min(0.99, cd['retention_base'] + strategy_ret_boost)
-                if np.random.random() < final_ret or ret_base:
+                if np.random.random() < min(0.99, cd['retention_base'] + strategy_ret_boost) or ret_base:
                     retained += 1
+        sim_revenues.append(total_revenue)
+        sim_retentions.append(retained / N_SIM_PLAYERS)
 
+    revenues = np.array(sim_revenues)
+    retentions = np.array(sim_retentions)
+    print(f'  Mean revenue: {revenues.mean():.0f}, P(>=70K): {(revenues>=70000).mean()*100:.1f}%')
+    print(f'  Mean retention: {retentions.mean()*100:.1f}%, P(>=10%): {(retentions>=0.10).mean()*100:.1f}%')
+    return {'mean_revenue': revenues.mean(), 'std_revenue': revenues.std(),
+            'prob_revenue': (revenues >= 70000).mean(),
+            'mean_retention': retentions.mean(), 'prob_retention': (retentions >= 0.10).mean(),
+            'revenues': revenues, 'retentions': retentions, 'label': 'Conservative'}
+
+
+def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
+    """Target scheme: demand-curve-based pricing with optimization."""
+    print('\n' + '=' * 50)
+    print('3.5 Target Scheme MC (Demand-Curve Optimized)')
+    print('=' * 50)
+
+    np.random.seed(RANDOM_SEED)
+
+    cluster_sizes = []
+    for cp in cluster_profiles:
+        n = max(1, int(cp['pct']/100*N_SIM_PLAYERS))
+        cluster_sizes.append(n)
+    cluster_sizes[-1] += N_SIM_PLAYERS - sum(cluster_sizes)
+
+    cluster_dists = {}
+    for c, cp in enumerate(cluster_profiles):
+        sub = df[df['cluster'] == c]
+        cluster_dists[c] = {
+            'lifecycle_mean': sub['lifecycle_days'].mean(),
+            'lifecycle_std': max(0.5, sub['lifecycle_days'].std()),
+            'pay_rate': cp['pay_rate']/100,
+            'mean_pay': max(0.1, cp['mean_pay']),
+            'retention_base': cp['retention_30d']/100,
+        }
+
+    # Optimized pricing per cluster using demand curves
+    prices_candidates = [6, 12, 18, 30, 68, 128, 328]
+    opt_prices = {}
+    for c, cp in enumerate(cluster_profiles):
+        best_rev = 0
+        best_p = 6
+        for p in prices_candidates:
+            prob = demand[c]['alpha'] * np.exp(-demand[c]['beta'] * p)
+            exp_rev = p * prob
+            if exp_rev > best_rev:
+                best_rev = exp_rev
+                best_p = p
+        opt_prices[c] = best_p
+        print(f'  {cp["name_cn"]}: optimal price={best_p}, expected rev/user={best_rev:.4f}')
+
+    sim_revenues, sim_retentions = [], []
+    for sim_idx in range(N_MC_SIMS):
+        if sim_idx % 1000 == 0 and sim_idx > 0:
+            print(f'  Progress: {sim_idx}/{N_MC_SIMS}')
+        total_revenue, retained = 0, 0
+        for c, (cp, n_players) in enumerate(zip(cluster_profiles, cluster_sizes)):
+            cd = cluster_dists[c]
+            opt_p = opt_prices[c]
+            prob_buy = demand[c]['alpha'] * np.exp(-demand[c]['beta'] * opt_p)
+            for _ in range(n_players):
+                lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
+                ret_base = np.random.random() < cd['retention_base']
+                organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
+                strategy_rev = opt_p if np.random.random() < prob_buy else 0
+                ret_boost = 0.02 if strategy_rev > 0 else 0
+                total_revenue += organic_pay + strategy_rev
+                if np.random.random() < min(0.99, cd['retention_base'] + ret_boost) or ret_base:
+                    retained += 1
         sim_revenues.append(total_revenue)
         sim_retentions.append(retained / N_SIM_PLAYERS)
 
@@ -251,11 +358,11 @@ def monte_carlo_simulation(cluster_profiles, df):
     mean_ret = retentions.mean()
     prob_ret = (retentions >= TARGET_RETENTION).mean()
 
-    print(f'\n  Results:')
-    print(f'    Mean Revenue: {mean_rev:.2f} CNY')
-    print(f'    P(Revenue >= {TARGET_REVENUE}): {prob_rev*100:.2f}%')
-    print(f'    Mean Retention: {mean_ret*100:.2f}%')
-    print(f'    P(Retention >= {TARGET_RETENTION*100:.0f}%): {prob_ret*100:.2f}%')
+    print(f'  Mean revenue: {mean_rev:.0f}, P(>=70K): {prob_rev*100:.1f}%')
+    print(f'  Mean retention: {mean_ret*100:.1f}%, P(>=10%): {prob_ret*100:.1f}%')
+    return {'mean_revenue': mean_rev, 'std_revenue': std_rev, 'prob_revenue': prob_rev,
+            'mean_retention': mean_ret, 'prob_retention': prob_ret,
+            'revenues': revenues, 'retentions': retentions, 'label': 'Target'}
 
     # Bilingual Monte Carlo results
     for lang, fig_dir in LANGS:
@@ -378,16 +485,29 @@ def main():
     print(f'Loaded {len(df)} players')
 
     cluster_profiles, df = player_clustering(df)
-    mc_results, cluster_sizes, cluster_profiles = monte_carlo_simulation(cluster_profiles, df)
+
+    # Demand curves
+    demand, beta_hat = estimate_demand_curves(cluster_profiles, df)
+
+    # Three MC simulations
+    mc_conservative = monte_carlo_conservative(cluster_profiles, df)
+    mc_target = monte_carlo_target(cluster_profiles, df, demand, beta_hat)
+
     sched_df = generate_strategy_schedule(cluster_profiles)
 
     results = [
         '=== 问题3 结果 ===',
         f'最优聚类数: {len(cluster_profiles)}',
-        f'期望总营收: {mc_results["mean_revenue"]:.2f} CNY',
-        f'P(营收>={TARGET_REVENUE}): {mc_results["prob_revenue"]*100:.2f}%',
-        f'期望留存率: {mc_results["mean_retention"]*100:.2f}%',
-        f'P(留存率>={TARGET_RETENTION*100:.0f}%): {mc_results["prob_retention"]*100:.2f}%',
+        '',
+        '--- 保守方案 ---',
+        f'期望营收: {mc_conservative["mean_revenue"]:.0f} CNY',
+        f'P(营收>=70000): {mc_conservative["prob_revenue"]*100:.1f}%',
+        f'期望留存率: {mc_conservative["mean_retention"]*100:.1f}%',
+        '',
+        '--- 目标方案(需求曲线优化) ---',
+        f'期望营收: {mc_target["mean_revenue"]:.0f} CNY',
+        f'P(营收>=70000): {mc_target["prob_revenue"]*100:.1f}%',
+        f'期望留存率: {mc_target["mean_retention"]*100:.1f}%',
     ]
     with open(os.path.join(RES_DIR, '问题3_results.txt'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(results))

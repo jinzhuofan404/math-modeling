@@ -291,5 +291,245 @@ def main():
     return df
 
 
+def build_day3_features():
+    """Step 1: Build features using ONLY Day1-3 data. No future information leakage."""
+    print('=' * 60)
+    print('Building Day3-only Feature Table')
+    print('=' * 60)
+
+    path1 = os.path.join(DATA_DIR, 'pickdata1.csv')
+    path2 = os.path.join(DATA_DIR, 'pickdata2.csv')
+
+    # ── Pass 1: Determine Day1 and collect active dates from pickdata2 ──
+    print('Pass 1: Reading pickdata2 for Day1 + active dates...')
+    user_day1 = {}       # uid -> Day1 date
+    user_active_dates = {}  # uid -> set of date objects
+
+    total = 0
+    for chunk in pd.read_csv(path2, chunksize=200000):
+        total += len(chunk)
+        chunk['dt'] = pd.to_datetime(chunk['dt'])
+        chunk['date'] = chunk['dt'].dt.date
+        chunk['register_time'] = pd.to_datetime(chunk['register_time'], errors='coerce')
+
+        for uid, grp in chunk.groupby('account_id'):
+            if uid not in user_day1:
+                # Day1 = register_time if available, else first pickdata2 record
+                rt = grp['register_time'].dropna()
+                if len(rt) > 0:
+                    user_day1[uid] = rt.iloc[0].date()
+                else:
+                    user_day1[uid] = grp['date'].min()
+                user_active_dates[uid] = set()
+            user_active_dates[uid].update(grp['date'].unique())
+
+        if total % 500000 == 0:
+            print(f'  processed {total} rows...')
+    print(f'  Pass 1 done: {len(user_day1)} users')
+
+    # ── Compute churn labels ──
+    print('Computing churn labels...')
+    churn_info = {}
+    for uid, dates in user_active_dates.items():
+        d1 = user_day1[uid]
+        # Check for first "2 consecutive days without records" starting from d1
+        all_days = sorted(dates)
+        churn_day = None
+        # Build a set of days relative to d1
+        max_day = 30
+        for offset in range(max_day):
+            day = d1 + pd.Timedelta(days=offset)
+            next_day = d1 + pd.Timedelta(days=offset + 1)
+            if day not in dates and next_day not in dates:
+                churn_day = offset  # 0-indexed: churned starting at this offset
+                break
+        if churn_day is None:
+            churn_info[uid] = {'duration': 30, 'event': 0}
+        else:
+            churn_info[uid] = {'duration': max(1, churn_day), 'event': 1}
+
+    # ── Pass 2: Extract Day1-3 features from pickdata2 ──
+    print('Pass 2: Extracting Day1-3 features from pickdata2...')
+    user_feat_p2 = {}
+    for uid in user_day1:
+        user_feat_p2[uid] = {
+            'days_logged_p2': 0,
+            'levels_day3': [],
+            'dur_times': [],
+            'diamond_snaps': [],
+            'gold_snaps': [],
+            'event_types': set(),
+            'is_pay_day3': False,
+            'is_league_day3': False,
+        }
+
+    total = 0
+    for chunk in pd.read_csv(path2, chunksize=200000):
+        total += len(chunk)
+        chunk['dt'] = pd.to_datetime(chunk['dt'])
+        chunk['date'] = chunk['dt'].dt.date
+        chunk['first_pay_time'] = pd.to_datetime(chunk['first_pay_time'], errors='coerce')
+
+        for uid, grp in chunk.groupby('account_id'):
+            if uid not in user_day1:
+                continue
+            d1 = user_day1[uid]
+            d3_end = d1 + pd.Timedelta(days=2)  # Day3 = d1+2
+            # Filter to Day1-3
+            mask_d3 = grp['date'] <= d3_end
+            d3 = grp[mask_d3]
+            if len(d3) == 0:
+                continue
+
+            u = user_feat_p2[uid]
+            u['days_logged_p2'] = d3['date'].nunique()
+            u['levels_day3'].extend(d3['current_level'].dropna().tolist())
+            u['dur_times'].extend(d3['duration_times'].dropna().tolist())
+            u['diamond_snaps'].extend(d3['current_diamond'].dropna().tolist())
+            u['gold_snaps'].extend(d3['current_gold'].dropna().tolist())
+            u['event_types'].update(d3['event'].dropna().unique())
+
+            # First pay within Day3
+            fpt = d3['first_pay_time'].dropna()
+            if len(fpt) > 0:
+                u['is_pay_day3'] = True
+
+            # No league check from p2 - p1 has league_name
+
+        if total % 500000 == 0:
+            print(f'  processed {total} rows...')
+    print(f'  Pass 2 done.')
+
+    # ── Pass 3: Extract Day1-3 resource features from pickdata1 ──
+    print('Pass 3: Extracting Day1-3 resource features from pickdata1...')
+    user_feat_p1 = {}
+    for uid in user_day1:
+        user_feat_p1[uid] = {
+            'food_reduce': 0.0, 'wood_reduce': 0.0, 'stone_reduce': 0.0,
+            'diamond_reduce': 0.0, 'coins_reduce': 0.0,
+            'levels_p1': [], 'league_day3': False, 'country': None,
+            'platform': None, 'channel_id': None,
+        }
+
+    total = 0
+    for chunk in pd.read_csv(path1, chunksize=200000):
+        total += len(chunk)
+        chunk['dt'] = pd.to_datetime(chunk['dt'])
+        chunk['date'] = chunk['dt'].dt.date
+
+        for uid, grp in chunk.groupby('account_id'):
+            if uid not in user_day1:
+                continue
+            d1 = user_day1[uid]
+            d3_end = d1 + pd.Timedelta(days=2)
+            mask_d3 = grp['date'] <= d3_end
+            d3 = grp[mask_d3]
+            if len(d3) == 0:
+                continue
+
+            u = user_feat_p1[uid]
+            # Resource consumption (reduce only)
+            for res in ['food', 'wood', 'stone', 'diamond', 'coins']:
+                sub = d3[(d3['resource_name'] == res) & (d3['change_type'] == 'reduce')]
+                if len(sub) > 0:
+                    u[f'{res}_reduce'] += sub['change_num'].sum()
+
+            u['levels_p1'].extend(d3['current_level'].dropna().tolist())
+
+            # League
+            league = d3['league_name'].dropna()
+            if len(league) > 0:
+                u['league_day3'] = True
+
+            # Demographics
+            last = d3.iloc[-1]
+            if u['country'] is None and pd.notna(last.get('country')):
+                u['country'] = last['country']
+            if u['platform'] is None:
+                u['platform'] = last.get('platform', 1)
+            if u['channel_id'] is None:
+                u['channel_id'] = last.get('channel_id', '')
+
+        if total % 500000 == 0:
+            print(f'  processed {total} rows...')
+    print(f'  Pass 3 done.')
+
+    # ── Build final feature table ──
+    print('Building feature table...')
+    rows = []
+    for uid in user_day1:
+        p2 = user_feat_p2[uid]
+        p1 = user_feat_p1[uid]
+        ci = churn_info[uid]
+
+        # Level: Day3 max level - Day1 min level
+        all_lvls = p2['levels_day3'] + p1['levels_p1']
+        level_d1 = min(all_lvls) if all_lvls else 0
+        level_d3 = max(all_lvls) if all_lvls else 0
+        level_change = level_d3 - level_d1
+
+        # Online time
+        avg_duration = np.mean(p2['dur_times']) if p2['dur_times'] else 0
+
+        # Diamond and gold
+        dia_d3 = np.median(p2['diamond_snaps']) if p2['diamond_snaps'] else 0
+        gold_d3 = np.median(p2['gold_snaps']) if p2['gold_snaps'] else 0
+
+        rows.append({
+            'account_id': uid,
+            'days_logged_d3': p2['days_logged_p2'],
+            'level_d3': level_d3,
+            'level_change_d3': level_change,
+            'avg_duration_d3': avg_duration,
+            'food_reduce_d3': p1['food_reduce'],
+            'wood_reduce_d3': p1['wood_reduce'],
+            'stone_reduce_d3': p1['stone_reduce'],
+            'diamond_reduce_d3': p1['diamond_reduce'],
+            'coins_reduce_d3': p1['coins_reduce'],
+            'diamond_d3': dia_d3,
+            'gold_d3': gold_d3,
+            'is_pay_d3': 1 if p2['is_pay_day3'] else 0,
+            'is_league_d3': 1 if p1['league_day3'] else 0,
+            'n_event_types_d3': len(p2['event_types']),
+            'country': p1['country'],
+            'platform': p1['platform'],
+            'channel_id': p1['channel_id'],
+            # Churn targets
+            'duration': ci['duration'],
+            'event_churned': ci['event'],
+        })
+
+    df = pd.DataFrame(rows)
+
+    # Summary
+    print(f'\n=== Day3 Feature Table Summary ===')
+    print(f'Users: {len(df)}')
+    print(f'Features: {len(df.columns)}')
+    print(f'Paying Day3: {df["is_pay_d3"].sum()} ({df["is_pay_d3"].mean()*100:.1f}%)')
+    print(f'League Day3: {df["is_league_d3"].sum()} ({df["is_league_d3"].mean()*100:.1f}%)')
+    print(f'Mean days logged (Day1-3): {df["days_logged_d3"].mean():.1f}')
+    print(f'Churn rate: {df["event_churned"].mean()*100:.1f}%')
+    print(f'Mean duration: {df["duration"].mean():.1f} days')
+    print(f'Censored: {(df["event_churned"]==0).sum()} users')
+
+    # Verify no leakage variables
+    forbidden = ['lifecycle_days', 'level_end', 'total_pay', 'vip_level_max', 'total_records']
+    leaked = [c for c in forbidden if c in df.columns]
+    if leaked:
+        print(f'[WARNING] Leakage variables found: {leaked}')
+    else:
+        print(f'[OK] No leakage variables detected.')
+
+    # Save
+    out_path = os.path.join(OUT_DIR, 'player_features_day3.csv')
+    df.to_csv(out_path, index=False)
+    print(f'\nSaved to {out_path}')
+    return df
+
+
 if __name__ == '__main__':
-    df = main()
+    # Run original full-period feature engineering
+    # df_full = main()
+
+    # Run Day3-only feature engineering (for Problem 1)
+    df_day3 = build_day3_features()

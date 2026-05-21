@@ -48,14 +48,13 @@ def set_font(lang):
 
 
 def load_data():
-    path = os.path.join(DATA_DIR, 'player_features.csv')
+    """Load Day3-only feature table (no future information leakage)."""
+    path = os.path.join(DATA_DIR, 'player_features_day3.csv')
     if not os.path.exists(path):
-        path = os.path.join(DATA_DIR, 'player_features_slim.csv')
+        raise FileNotFoundError(f'Day3 feature table not found: {path}. Run 特征工程.py first.')
     df = pd.read_csv(path)
-    print(f'Loaded {len(df)} players')
-    df['duration'] = df['lifecycle_days'].clip(upper=90)
-    df['event_churned'] = ((df['days_active'] < 20) & (df['lifecycle_days'] < 30)).astype(int)
-    df['log_lifecycle'] = np.log1p(df['lifecycle_days'])
+    print(f'Loaded {len(df)} players (Day3 features only)')
+    # duration and event_churned are pre-computed with correct churn definition
     return df
 
 
@@ -66,7 +65,7 @@ def km_survival_curve(df):
     print('=' * 50)
 
     kmf = KaplanMeierFitter()
-    T = df['lifecycle_days'].values
+    T = df['duration'].values
     E = df['event_churned'].values
     kmf.fit(T, E, label='All Players')
 
@@ -145,9 +144,10 @@ def churn_key_moments(df):
     print('1.2 Key Churn Time Points')
     print('=' * 50)
 
-    active_dist = df['days_active'].value_counts().sort_index()
+    active_dist = df['days_logged_d3'].value_counts().sort_index()
+    # Use duration for survival curve
     days_arr = np.arange(1, 31)
-    day_counts = [len(df[df['days_active'] >= d]) for d in days_arr]
+    day_counts = [len(df[df['duration'] >= d]) for d in days_arr]
     day_drops = [day_counts[i-1] - day_counts[i] for i in range(1, len(day_counts))]
     day_drop_rate = [day_drops[i] / max(day_counts[i], 1) for i in range(len(day_drops))]
     top_drops = sorted(zip(range(2, 31), day_drop_rate), key=lambda x: x[1], reverse=True)[:5]
@@ -194,23 +194,16 @@ def cox_prediction_model(df):
     print('1.3 Cox Proportional Hazards Prediction Model')
     print('=' * 50)
 
+    # ── Strictly Day1-3 features only (no future info) ──
     df_model = df.copy()
-    df_model['daily_activity_rate'] = df_model['total_records'] / df_model['lifecycle_days'].clip(lower=1)
-    df_model['level_velocity'] = df_model['level_growth_rate']
-    for res in ['food', 'wood', 'stone', 'diamond', 'coins']:
-        df_model[f'daily_{res}_consumption'] = df_model[f'{res}_reduce'] / df_model['lifecycle_days'].clip(lower=1)
-        if res in ['food', 'wood', 'stone']:
-            df_model[f'{res}_balance'] = df_model[f'{res}_get'] / df_model[f'{res}_reduce'].clip(lower=1)
-    for col in ['total_pay', 'diamond_median', 'duration_times']:
-        df_model[f'log_{col}'] = np.log1p(df_model[col])
-
+    # All features are from Day1-3 window. No lifecycle_days, level_end,
+    # total_pay, vip_level_max, or any full-period variables.
     feature_cols = [
-        'daily_activity_rate', 'level_velocity', 'is_paying', 'is_in_league',
-        'daily_food_consumption', 'daily_wood_consumption', 'daily_stone_consumption',
-        'daily_diamond_consumption', 'daily_coins_consumption',
-        'food_balance', 'wood_balance', 'stone_balance',
-        'log_total_pay', 'log_diamond_median', 'log_duration_times',
-        'n_event_types', 'vip_level_max',
+        'days_logged_d3', 'level_d3', 'level_change_d3', 'avg_duration_d3',
+        'food_reduce_d3', 'wood_reduce_d3', 'stone_reduce_d3',
+        'diamond_reduce_d3', 'coins_reduce_d3',
+        'diamond_d3', 'gold_d3',
+        'is_pay_d3', 'is_league_d3', 'n_event_types_d3',
     ]
 
     df_clean = df_model.dropna(subset=feature_cols + ['duration', 'event_churned'])
@@ -308,11 +301,11 @@ def segmented_retention(df):
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
         for mask, label, color in [
-            (df['is_paying']==1, pay_label, 'darkorange'),
-            (df['is_paying']==0, nonpay_label, 'steelblue')
+            (df['is_pay_d3']==1, pay_label, 'darkorange'),
+            (df['is_pay_d3']==0, nonpay_label, 'steelblue')
         ]:
             sub = df[mask]
-            kmf.fit(sub['lifecycle_days'], sub['event_churned'], label=label)
+            kmf.fit(sub['duration'], sub['event_churned'], label=label)
             kmf.plot_survival_function(ax=ax1, color=color)
         ax1.set_xlabel(xl, fontsize=12)
         ax1.set_ylabel(yl, fontsize=12)
@@ -321,11 +314,11 @@ def segmented_retention(df):
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         for mask, label, color in [
-            (df['is_in_league']==1, league_label, 'darkgreen'),
-            (df['is_in_league']==0, noleague_label, 'steelblue')
+            (df['is_league_d3']==1, league_label, 'darkgreen'),
+            (df['is_league_d3']==0, noleague_label, 'steelblue')
         ]:
             sub = df[mask]
-            kmf.fit(sub['lifecycle_days'], sub['event_churned'], label=label)
+            kmf.fit(sub['duration'], sub['event_churned'], label=label)
             kmf.plot_survival_function(ax=ax2, color=color)
         ax2.set_xlabel(xl, fontsize=12)
         ax2.set_ylabel(yl, fontsize=12)
@@ -337,12 +330,12 @@ def segmented_retention(df):
         plt.savefig(os.path.join(fig_dir, 'figure6_segmented_retention.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
-    for name, mask in [('Paying', df['is_paying']==1), ('Non-Paying', df['is_paying']==0),
-                        ('In League', df['is_in_league']==1), ('No League', df['is_in_league']==0)]:
+    for name, mask in [('Paying', df['is_pay_d3']==1), ('Non-Paying', df['is_pay_d3']==0),
+                        ('In League', df['is_league_d3']==1), ('No League', df['is_league_d3']==0)]:
         sub = df[mask]
-        kmf.fit(sub['lifecycle_days'], sub['event_churned'])
+        kmf.fit(sub['duration'], sub['event_churned'])
         ret_7 = kmf.survival_function_at_times(7).values[0]
-        ret_30 = kmf.survival_function_at_times(30).values[0] if 30 <= sub['lifecycle_days'].max() else 0
+        ret_30 = kmf.survival_function_at_times(30).values[0] if 30 <= sub['duration'].max() else 0
         print(f'  {name}: 7-day ret={ret_7*100:.1f}%, 30-day ret={ret_30*100:.1f}%, n={len(sub)}')
 
 
