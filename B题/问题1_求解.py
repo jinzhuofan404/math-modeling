@@ -1,0 +1,377 @@
+"""
+问题1：玩家留存规律与流失预测模型
+方法：Kaplan-Meier生存估计 + Cox比例风险模型 + 流失预测
+"""
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import os, warnings
+warnings.filterwarnings('ignore')
+
+from lifelines import KaplanMeierFitter, CoxPHFitter, NelsonAalenFitter
+from lifelines.utils import concordance_index
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error
+
+# Plot config
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei', 'Arial']
+plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['font.size'] = 10
+plt.rcParams['axes.linewidth'] = 1.5
+plt.rcParams['xtick.major.width'] = 1.5
+plt.rcParams['ytick.major.width'] = 1.5
+plt.rcParams['lines.linewidth'] = 2
+
+BASE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+FIG_CN = os.path.join(BASE_DIR, 'figures', '中文版')
+FIG_EN = os.path.join(BASE_DIR, 'figures', '英文版')
+RES_DIR = os.path.join(BASE_DIR, 'results')
+for d in [FIG_CN, FIG_EN, RES_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+RANDOM_SEED = 42
+LANGS = [
+    ('cn', FIG_CN, 'SimHei'),
+    ('en', FIG_EN, 'DejaVu Sans'),
+]
+
+
+def set_font(lang):
+    if lang == 'cn':
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei', 'Arial']
+    else:
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Arial Unicode MS', 'SimHei', 'Microsoft YaHei']
+
+
+def load_data():
+    path = os.path.join(DATA_DIR, 'player_features.csv')
+    if not os.path.exists(path):
+        path = os.path.join(DATA_DIR, 'player_features_slim.csv')
+    df = pd.read_csv(path)
+    print(f'Loaded {len(df)} players')
+    df['duration'] = df['lifecycle_days'].clip(upper=90)
+    df['event_churned'] = ((df['days_active'] < 20) & (df['lifecycle_days'] < 30)).astype(int)
+    df['log_lifecycle'] = np.log1p(df['lifecycle_days'])
+    return df
+
+
+def km_survival_curve(df):
+    """(1) KM survival curve with bilingual output."""
+    print('\n' + '=' * 50)
+    print('1.1 Kaplan-Meier Survival Analysis')
+    print('=' * 50)
+
+    kmf = KaplanMeierFitter()
+    T = df['lifecycle_days'].values
+    E = df['event_churned'].values
+    kmf.fit(T, E, label='All Players')
+
+    for day in [1, 7, 14, 30]:
+        surv = kmf.survival_function_at_times(day).values[0]
+        print(f'  Day-{day} retention: {surv*100:.2f}%')
+    median_surv = kmf.median_survival_time_
+    print(f'  Median survival: {median_surv:.1f} days')
+
+    # Bilingual KM curve
+    label_dicts = {
+        'cn': {
+            'title': 'Kaplan-Meier 玩家留存曲线',
+            'xlabel': '注册后天数', 'ylabel': '留存概率',
+            'd1': '第1天', 'd7': '第7天', 'd14': '第14天', 'd30': '第30天',
+            'line_label': '所有玩家',
+        },
+        'en': {
+            'title': 'Kaplan-Meier Player Retention Curve',
+            'xlabel': 'Days Since Registration', 'ylabel': 'Survival Probability',
+            'd1': 'Day 1', 'd7': 'Day 7', 'd14': 'Day 14', 'd30': 'Day 30',
+            'line_label': 'All Players',
+        }
+    }
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        lb = label_dicts[lang]
+        fig, ax = plt.subplots(figsize=(8, 6))
+        kmf.plot_survival_function(ax=ax, ci_show=True, label=lb['line_label'])
+        for day_val, lb_key, color in [(1, 'd1', 'red'), (7, 'd7', 'orange'), (14, 'd14', 'green'), (30, 'd30', 'blue')]:
+            ax.axvline(x=day_val, color=color, linestyle='--', alpha=0.4, label=lb[lb_key])
+        ax.set_xlabel(lb['xlabel'], fontsize=12)
+        ax.set_ylabel(lb['ylabel'], fontsize=12)
+        ax.set_title(lb['title'], fontsize=14)
+        ax.legend(fontsize=9)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.set_ylim(0, 1.05)
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure1_km_curve.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    # Bilingual hazard rate
+    naf = NelsonAalenFitter()
+    naf.fit(T, E)
+    haz = naf.cumulative_hazard_.diff().fillna(0)
+    haz_smooth = haz.rolling(window=3, center=True).mean()
+    top_peaks = haz_smooth.nlargest(5, haz_smooth.columns[0])
+
+    label_dicts_h = {
+        'cn': {'title': '玩家流失风险率随时间变化', 'xlabel': '注册后天数', 'ylabel': '风险率'},
+        'en': {'title': 'Player Churn Hazard Rate Over Time', 'xlabel': 'Days Since Registration', 'ylabel': 'Hazard Rate'},
+    }
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        lb = label_dicts_h[lang]
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(haz_smooth.index, haz_smooth.values, 'b-', linewidth=1.5)
+        ax.set_xlabel(lb['xlabel'], fontsize=12)
+        ax.set_ylabel(lb['ylabel'], fontsize=12)
+        ax.set_title(lb['title'], fontsize=14)
+        for day in top_peaks.index:
+            ax.axvline(x=day, color='red', linestyle=':', alpha=0.5)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.set_xlim(0, min(60, T.max()))
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure2_hazard_rate.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    print(f'  Top churn risk days: {list(top_peaks.index[:5])}')
+    return kmf
+
+
+def churn_key_moments(df):
+    """(2) Key churn moments with bilingual output."""
+    print('\n' + '=' * 50)
+    print('1.2 Key Churn Time Points')
+    print('=' * 50)
+
+    active_dist = df['days_active'].value_counts().sort_index()
+    days_arr = np.arange(1, 31)
+    day_counts = [len(df[df['days_active'] >= d]) for d in days_arr]
+    day_drops = [day_counts[i-1] - day_counts[i] for i in range(1, len(day_counts))]
+    day_drop_rate = [day_drops[i] / max(day_counts[i], 1) for i in range(len(day_drops))]
+    top_drops = sorted(zip(range(2, 31), day_drop_rate), key=lambda x: x[1], reverse=True)[:5]
+    print('  Highest churn rate days:')
+    for day, rate in top_drops:
+        print(f'    Day {day}: {rate*100:.1f}% drop')
+
+    label_dicts = {
+        'cn': {
+            't1': '玩家活跃天数分布', 't2': '各天数阈值留存玩家数',
+            'x1': '活跃天数', 'y1': '玩家数',
+            'x2': '天数阈值', 'y2': '存活≥X天的玩家数',
+        },
+        'en': {
+            't1': 'Distribution of Player Active Days', 't2': 'Players Surviving >= Day Threshold',
+            'x1': 'Active Days', 'y1': 'Number of Players',
+            'x2': 'Day Threshold', 'y2': 'Players Surviving >= Day X',
+        }
+    }
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        lb = label_dicts[lang]
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        ax1.bar(active_dist.index[:30], active_dist.values[:30], color='steelblue', edgecolor='white', alpha=0.8)
+        ax1.set_xlabel(lb['x1'], fontsize=12)
+        ax1.set_ylabel(lb['y1'], fontsize=12)
+        ax1.set_title(lb['t1'], fontsize=14)
+        ax1.grid(True, linestyle='--', alpha=0.4, axis='y')
+        ax2.plot(range(1, 31), day_counts, 'b-o', markersize=4, linewidth=1.5)
+        ax2.set_xlabel(lb['x2'], fontsize=12)
+        ax2.set_ylabel(lb['y2'], fontsize=12)
+        ax2.set_title(lb['t2'], fontsize=14)
+        ax2.grid(True, linestyle='--', alpha=0.4)
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure3_active_days.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    return top_drops
+
+
+def cox_prediction_model(df):
+    """(3) Cox PH model with bilingual output."""
+    print('\n' + '=' * 50)
+    print('1.3 Cox Proportional Hazards Prediction Model')
+    print('=' * 50)
+
+    df_model = df.copy()
+    df_model['daily_activity_rate'] = df_model['total_records'] / df_model['lifecycle_days'].clip(lower=1)
+    df_model['level_velocity'] = df_model['level_growth_rate']
+    for res in ['food', 'wood', 'stone', 'diamond', 'coins']:
+        df_model[f'daily_{res}_consumption'] = df_model[f'{res}_reduce'] / df_model['lifecycle_days'].clip(lower=1)
+        if res in ['food', 'wood', 'stone']:
+            df_model[f'{res}_balance'] = df_model[f'{res}_get'] / df_model[f'{res}_reduce'].clip(lower=1)
+    for col in ['total_pay', 'diamond_median', 'duration_times']:
+        df_model[f'log_{col}'] = np.log1p(df_model[col])
+
+    feature_cols = [
+        'daily_activity_rate', 'level_velocity', 'is_paying', 'is_in_league',
+        'daily_food_consumption', 'daily_wood_consumption', 'daily_stone_consumption',
+        'daily_diamond_consumption', 'daily_coins_consumption',
+        'food_balance', 'wood_balance', 'stone_balance',
+        'log_total_pay', 'log_diamond_median', 'log_duration_times',
+        'n_event_types', 'vip_level_max',
+    ]
+
+    df_clean = df_model.dropna(subset=feature_cols + ['duration', 'event_churned'])
+    df_clean = df_clean[~df_clean[feature_cols].isin([np.inf, -np.inf]).any(axis=1)]
+    X = df_clean[feature_cols].copy()
+    scaler = StandardScaler()
+    X_scaled = pd.DataFrame(scaler.fit_transform(X), columns=feature_cols, index=X.index)
+
+    X_train, X_test = train_test_split(X_scaled, test_size=0.3, random_state=RANDOM_SEED)
+    train_data = pd.concat([X_train, df_clean.loc[X_train.index, ['duration', 'event_churned']]], axis=1)
+
+    cph = CoxPHFitter(penalizer=0.1)
+    cph.fit(train_data, duration_col='duration', event_col='event_churned', show_progress=False)
+    print(cph.print_summary())
+
+    # Predict
+    test_data = X_test.copy()
+    surv_funcs = cph.predict_survival_function(test_data)
+    pred_days = [np.trapz(surv_funcs[idx].values.flatten(), surv_funcs[idx].index.values) for idx in test_data.index]
+    actual_days = df_clean.loc[X_test.index, 'duration'].values
+    c_index = concordance_index(actual_days, pred_days, df_clean.loc[X_test.index, 'event_churned'].values)
+    mae = mean_absolute_error(actual_days, pred_days)
+    print(f'  C-index: {c_index:.4f}, MAE: {mae:.2f} days')
+
+    # Bilingual Cox coefficients
+    coef_df = cph.summary[['coef', 'exp(coef)']].sort_values('coef')
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        if lang == 'cn':
+            title = 'Cox模型：各特征对流失风险的影响'
+            xlabel = '回归系数（负值=保护，正值=风险）'
+        else:
+            title = 'Cox Model: Feature Impact on Churn Risk'
+            xlabel = 'Coefficient (Negative = Protective, Positive = Risk)'
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        colors = ['red' if c < 0 else 'green' for c in coef_df['coef']]
+        ax.barh(range(len(coef_df)), coef_df['coef'].values, color=colors, alpha=0.8)
+        ax.set_yticks(range(len(coef_df)))
+        ax.set_yticklabels(coef_df.index, fontsize=9)
+        ax.set_xlabel(xlabel, fontsize=11)
+        ax.set_title(title, fontsize=14)
+        ax.axvline(x=0, color='black', linewidth=0.8)
+        ax.grid(True, linestyle='--', alpha=0.4, axis='x')
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure4_cox_coefficients.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    # Bilingual Pred vs Actual
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        if lang == 'cn':
+            title = f'预测生存天数 vs 实际生存天数 (MAE={mae:.1f})'
+            xl, yl, perf = '实际生存天数', '预测生存天数', '完美预测'
+        else:
+            title = f'Predicted vs Actual Survival Days (MAE={mae:.1f})'
+            xl, yl, perf = 'Actual Survival Days', 'Predicted Survival Days', 'Perfect Prediction'
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(actual_days, pred_days, alpha=0.3, s=15, c='steelblue', edgecolors='none')
+        ax.plot([0, max(actual_days)], [0, max(actual_days)], 'r--', linewidth=1, label=perf)
+        ax.set_xlabel(xl, fontsize=12)
+        ax.set_ylabel(yl, fontsize=12)
+        ax.set_title(title, fontsize=14)
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.4)
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure5_pred_vs_actual.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    return cph, {'C_index': c_index, 'MAE': mae}
+
+
+def segmented_retention(df):
+    """(4) Segmented retention curves with bilingual output."""
+    print('\n' + '=' * 50)
+    print('1.4 Segmented Retention Analysis')
+    print('=' * 50)
+
+    kmf = KaplanMeierFitter()
+
+    for lang, fig_dir, _ in LANGS:
+        set_font(lang)
+        if lang == 'cn':
+            t1, t2 = '留存率：付费 vs 非付费玩家', '留存率：加联盟 vs 未加联盟'
+            xl, yl = '注册后天数', '留存概率'
+            pay_label, nonpay_label = '付费玩家', '非付费玩家'
+            league_label, noleague_label = '加联盟', '未加联盟'
+        else:
+            t1, t2 = 'Retention: Paying vs Non-Paying Players', 'Retention: League vs Non-League Players'
+            xl, yl = 'Days Since Registration', 'Survival Probability'
+            pay_label, nonpay_label = 'Paying', 'Non-Paying'
+            league_label, noleague_label = 'In League', 'No League'
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+        for mask, label, color in [
+            (df['is_paying']==1, pay_label, 'darkorange'),
+            (df['is_paying']==0, nonpay_label, 'steelblue')
+        ]:
+            sub = df[mask]
+            kmf.fit(sub['lifecycle_days'], sub['event_churned'], label=label)
+            kmf.plot_survival_function(ax=ax1, color=color)
+        ax1.set_xlabel(xl, fontsize=12)
+        ax1.set_ylabel(yl, fontsize=12)
+        ax1.set_title(t1, fontsize=13)
+        ax1.legend(fontsize=10)
+        ax1.grid(True, linestyle='--', alpha=0.4)
+
+        for mask, label, color in [
+            (df['is_in_league']==1, league_label, 'darkgreen'),
+            (df['is_in_league']==0, noleague_label, 'steelblue')
+        ]:
+            sub = df[mask]
+            kmf.fit(sub['lifecycle_days'], sub['event_churned'], label=label)
+            kmf.plot_survival_function(ax=ax2, color=color)
+        ax2.set_xlabel(xl, fontsize=12)
+        ax2.set_ylabel(yl, fontsize=12)
+        ax2.set_title(t2, fontsize=13)
+        ax2.legend(fontsize=10)
+        ax2.grid(True, linestyle='--', alpha=0.4)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_dir, 'figure6_segmented_retention.png'), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    for name, mask in [('Paying', df['is_paying']==1), ('Non-Paying', df['is_paying']==0),
+                        ('In League', df['is_in_league']==1), ('No League', df['is_in_league']==0)]:
+        sub = df[mask]
+        kmf.fit(sub['lifecycle_days'], sub['event_churned'])
+        ret_7 = kmf.survival_function_at_times(7).values[0]
+        ret_30 = kmf.survival_function_at_times(30).values[0] if 30 <= sub['lifecycle_days'].max() else 0
+        print(f'  {name}: 7-day ret={ret_7*100:.1f}%, 30-day ret={ret_30*100:.1f}%, n={len(sub)}')
+
+
+def main():
+    print('=' * 60)
+    print('Problem 1: Retention & Churn Prediction')
+    print('=' * 60)
+    df = load_data()
+    print(f'Dataset: {len(df)} players, churn rate: {df["event_churned"].mean()*100:.1f}%')
+
+    kmf = km_survival_curve(df)
+    top_drops = churn_key_moments(df)
+    cph, metrics = cox_prediction_model(df)
+    segmented_retention(df)
+
+    results = [
+        '=== 问题1 结果 ===',
+        f'次日留存率: {kmf.survival_function_at_times(1).values[0]*100:.2f}%',
+        f'7日留存率: {kmf.survival_function_at_times(7).values[0]*100:.2f}%',
+        f'14日留存率: {kmf.survival_function_at_times(14).values[0]*100:.2f}%',
+        f'30日留存率: {kmf.survival_function_at_times(30).values[0]*100:.2f}%',
+        f'中位生存时间: {kmf.median_survival_time_:.1f} 天',
+        f'流失关键节点: {top_drops}',
+        f'Cox: C-index={metrics["C_index"]:.4f}, MAE={metrics["MAE"]:.2f}天',
+    ]
+    with open(os.path.join(RES_DIR, '问题1_results.txt'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(results))
+    print('\nResults saved.')
+
+
+if __name__ == '__main__':
+    main()
