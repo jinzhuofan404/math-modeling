@@ -291,6 +291,7 @@ def fig4_cox_coefficients(df):
 # ═══════════════════════════════════════════════════════════════
 def fig5_resource_level(df):
     """Core claim: Stone consumption correlates most with level growth (r=0.50)."""
+    df = df.copy()
     for c in ['daily_food','daily_wood','daily_stone']:
         df[c] = df[f'{c.split("_")[1]}_reduce'] / df['lifecycle_days'].clip(lower=1)
     ls = df.groupby('level_end').agg(n=('account_id','count'),
@@ -334,6 +335,7 @@ def fig5_resource_level(df):
 # ═══════════════════════════════════════════════════════════════
 def fig6_diamond_churn(df):
     """Core claim: Diamond stock < 566 raises 7-day churn probability above 50%."""
+    df = df.copy()
     df['churned'] = (df['lifecycle_days']<7).astype(int)
     df['ld'] = np.log1p(df['diamond_median'])
     dd = df[['ld','diamond_median','churned']].dropna()
@@ -468,6 +470,7 @@ def fig9_xgb_importance(df):
                  'food_get','food_reduce','wood_get','wood_reduce','stone_get','stone_reduce',
                  'coins_get','coins_reduce','diamond_get','diamond_reduce','diamond_median',
                  'total_get','total_reduce','duration_times']
+    df = df.copy()
     df['ri'] = df['total_reduce']/df['lifecycle_days'].clip(1)
     df['df'] = df['diamond_get']-df['diamond_reduce']
     extra = ['ri','df']
@@ -956,29 +959,6 @@ def fig15_mc_convergence(df):
         ax.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
         save_pub(fig, 'fig15_mc_convergence', fig_dir)
         plt.close()
-
-
-# ═══════════════════════════════════════════════════════════════
-# Master table: Figure contracts
-# ═══════════════════════════════════════════════════════════════
-CONTRACTS = """
-Figure Contracts:
-  Fig1  KM curve           | Core: Median survival = 1 day, 42% day-1 retention
-  Fig2  Hazard rate        | Core: Day 2 is the critical churn peak (54% drop)
-  Fig3  Segmented retention| Core: Paying/League players have 3-5x retention
-  Fig4  Cox coefficients   | Core: Event diversity & diamond stock protect against churn
-  Fig5  Resource-Level     | Core: Stone consumption most correlated with growth (r=0.50)
-  Fig6  Diamond-Churn      | Core: Diamond < 566 triggers >50% churn probability
-  Fig7  Clustering         | Core: 6 segments, 74% are zero-spend fast-churners
-  Fig8  First Pay          | Core: Only 3.8% pay; higher pay = longer lifecycle
-  Fig9  XGBoost Importance | Core: Level_end and diamond_median are strongest pay predictors
-  Fig10 Monte Carlo Dist   | Core: Retention target met, revenue limited by pay rate
-  Fig11 Active Days        | Core: Most players quit within 3 days
-  Fig12 Cox Pred vs Actual | Core: C-index=0.95, MAE=5.0 days
-  Fig13 XGBoost Pred       | Core: Pay prediction accuracy on log-transformed target
-  Fig14 Cluster 3D         | Core: 6 clusters separate along lifecycle/pay/level axes
-  Fig15 MC Convergence     | Core: Revenue estimate stabilizes after ~500 simulations
-"""
 
 
 def main():

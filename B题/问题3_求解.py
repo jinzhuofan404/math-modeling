@@ -222,30 +222,13 @@ def estimate_demand_curves(cluster_profiles, df):
     return demand, beta_hat
 
 
-def monte_carlo_conservative(cluster_profiles, df):
+def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
     """Conservative scheme: based on historical pay rates, no intervention boost."""
     print('\n' + '=' * 50)
     print('3.4 Conservative Scheme MC')
     print('=' * 50)
 
     np.random.seed(RANDOM_SEED)
-
-    cluster_sizes = []
-    for cp in cluster_profiles:
-        n = max(1, int(cp['pct']/100*N_SIM_PLAYERS))
-        cluster_sizes.append(n)
-    cluster_sizes[-1] += N_SIM_PLAYERS - sum(cluster_sizes)
-
-    cluster_dists = {}
-    for c, cp in enumerate(cluster_profiles):
-        sub = df[df['cluster'] == c]
-        cluster_dists[c] = {
-            'lifecycle_mean': sub['lifecycle_days'].mean(),
-            'lifecycle_std': max(0.5, sub['lifecycle_days'].std()),
-            'pay_rate': cp['pay_rate']/100,
-            'mean_pay': max(0.1, cp['mean_pay']),
-            'retention_base': cp['retention_30d']/100,
-        }
 
     gift_packs = [
         {'price': 6, 'prob_mult': 1.0, 'ret_boost': 0.02},
@@ -288,7 +271,7 @@ def monte_carlo_conservative(cluster_profiles, df):
             'revenues': revenues, 'retentions': retentions, 'label': 'Conservative'}
 
 
-def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
+def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists):
     """Target scheme: intervention elasticity + greedy sequential push."""
     print('\n' + '=' * 50)
     print('3.5 Target Scheme MC (Intervention Elasticity)')
@@ -308,23 +291,6 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
         4: 1.50,  # 高氪核心党: proven willingness → 50% uplift (scarcity/limited packs)
         5: 1.30,  # 中氪战力党: paying → 30% uplift
     }
-
-    cluster_sizes = []
-    for cp in cluster_profiles:
-        n = max(1, int(cp['pct']/100*N_SIM_PLAYERS))
-        cluster_sizes.append(n)
-    cluster_sizes[-1] += N_SIM_PLAYERS - sum(cluster_sizes)
-
-    cluster_dists = {}
-    for c, cp in enumerate(cluster_profiles):
-        sub = df[df['cluster'] == c]
-        cluster_dists[c] = {
-            'lifecycle_mean': sub['lifecycle_days'].mean(),
-            'lifecycle_std': max(0.5, sub['lifecycle_days'].std()),
-            'pay_rate': cp['pay_rate']/100,
-            'mean_pay': max(0.1, cp['mean_pay']),
-            'retention_base': cp['retention_30d']/100,
-        }
 
     # ── Gift packs ──
     gift_packs = [
@@ -359,10 +325,25 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
         print(f'  {cp["name_cn"]}: top3 packs = ' +
               ', '.join([f'{gp["price"]}yuan(P={pp:.3f},ER={er:.1f})' for er, gp, pp in top3]))
 
+    # ── Precompute ranked pack lists per cluster (loop-invariant) ──
+    cluster_ranked = {}
+    for c, cp in enumerate(cluster_profiles):
+        lam = lambda_c.get(c, 0.05)
+        ranked = []
+        for gp in gift_packs:
+            if cp['pay_rate'] > 0:
+                pp = lam * cp['pay_rate']/100.0 * np.exp(-beta_hat * gp['price'])
+                pp = max(pp, 0.01)
+            else:
+                pp = lam * np.exp(-beta_hat * gp['price'])
+                pp = max(pp, 0.001)
+            ranked.append((gp, pp))
+        ranked.sort(key=lambda x: x[1] * x[0]['price'], reverse=True)
+        cluster_ranked[c] = ranked
+
     # ── MC Simulation ──
     sim_revenues, sim_retentions = [], []
-    MAX_PUSHES = 8
-    lam_pen, mu_pen = 0.003, 0.001
+    MAX_PUSHES, lam_pen, mu_pen = 8, 0.003, 0.001
 
     for sim_idx in range(N_MC_SIMS):
         if sim_idx % 1000 == 0 and sim_idx > 0:
@@ -370,18 +351,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
         total_revenue, retained = 0, 0
         for c, (cp, n_players) in enumerate(zip(cluster_profiles, cluster_sizes)):
             cd = cluster_dists[c]
-            lam = lambda_c.get(c, 0.05)
-            # Build ranked pack list for this cluster
-            ranked = []
-            for gp in gift_packs:
-                if cp['pay_rate'] > 0:
-                    pp = lam * cp['pay_rate']/100.0 * np.exp(-beta_hat * gp['price'])
-                    pp = max(pp, 0.01)
-                else:
-                    pp = lam * np.exp(-beta_hat * gp['price'])
-                    pp = max(pp, 0.001)
-                ranked.append((gp, pp))
-            ranked.sort(key=lambda x: x[1] * x[0]['price'], reverse=True)
+            ranked = cluster_ranked[c]
 
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
@@ -417,26 +387,31 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat):
             'revenues': revs, 'retentions': rets, 'label': 'Target'}
 
 
-def monte_carlo_baseline(cluster_profiles, df):
-    """No-intervention baseline: organic payments only."""
-    print('\n' + '=' * 50)
-    print('3.3b Baseline (No Intervention)')
-    print('=' * 50)
-    np.random.seed(RANDOM_SEED)
-    cl_sizes = []
+def build_mc_state(cluster_profiles, df):
+    """Shared cluster sizes and distributions for all MC schemes."""
+    sizes = []
     for cp in cluster_profiles:
-        cl_sizes.append(max(1, int(cp['pct']/100*N_SIM_PLAYERS)))
-    cl_sizes[-1] += N_SIM_PLAYERS - sum(cl_sizes)
-    cl_dists = {}
+        sizes.append(max(1, int(cp['pct']/100*N_SIM_PLAYERS)))
+    sizes[-1] += N_SIM_PLAYERS - sum(sizes)
+    dists = {}
     for c, cp in enumerate(cluster_profiles):
         sub = df[df['cluster'] == c]
-        cl_dists[c] = {
+        dists[c] = {
             'lifecycle_mean': sub['lifecycle_days'].mean(),
             'lifecycle_std': max(0.5, sub['lifecycle_days'].std()),
             'pay_rate': cp['pay_rate']/100,
             'mean_pay': max(0.1, cp['mean_pay']),
             'retention_base': cp['retention_30d']/100,
         }
+    return sizes, dists
+
+
+def monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists):
+    """No-intervention baseline: organic payments only."""
+    print('\n' + '=' * 50)
+    print('3.3b Baseline (No Intervention)')
+    print('=' * 50)
+    np.random.seed(RANDOM_SEED)
     sim_revenues, sim_retentions = [], []
     for _ in range(N_MC_SIMS):
         tr, ret = 0, 0
@@ -517,10 +492,13 @@ def main():
     # Demand curves
     demand, beta_hat = estimate_demand_curves(cluster_profiles, df)
 
+    # Shared MC state
+    cl_sizes, cl_dists = build_mc_state(cluster_profiles, df)
+
     # Three MC simulations
-    mc_baseline = monte_carlo_baseline(cluster_profiles, df)
-    mc_conservative = monte_carlo_conservative(cluster_profiles, df)
-    mc_target = monte_carlo_target(cluster_profiles, df, demand, beta_hat)
+    mc_baseline = monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists)
+    mc_conservative = monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists)
+    mc_target = monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists)
 
     sched_df = generate_strategy_schedule(cluster_profiles)
 
