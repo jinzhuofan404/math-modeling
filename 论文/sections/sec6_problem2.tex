@@ -1,5 +1,7 @@
 \section{问题2：资源消耗与付费行为关联分析}
 
+\textbf{数据窗口说明：} 问题2的研究目标是资源消耗、成长速度与付费行为的关联分析，题目未限制时间窗口。本节使用30天全周期数据进行关联分析，与问题1的预测任务（仅前3天）和问题3的策略模拟（综合前两问结果）形成互补。
+
 \subsection{资源消耗与等级增长的量化关系}
 
 \subsubsection{分析方法}
@@ -102,7 +104,7 @@ y_{\log} = \ln(1 + \text{total\_pay})
 为解释模型预测，计算SHAP（SHapley Additive exPlanations）值量化各特征对预测结果的边际贡献。图\ref{fig:p2_shap}展示了排名前12的特征重要性。关键发现：
 
 \begin{enumerate}
-    \item \textbf{level\_end（最终等级）}是最重要的付费预测因子——玩家成长深度直接驱动付费需求
+    \item \textbf{level\_end（最终等级）}是最重要的付费预测因子——玩家成长深度与付费需求之间存在强关联
     \item \textbf{diamond\_median（钻石中位存量）}紧随其后——钻石存量是付费意愿和能力的重要代理变量
     \item \textbf{level\_growth（等级增长量）}、\textbf{diamond\_flow（钻石净流量）}和\textbf{days\_active（活跃天数）}位列前五
 \end{enumerate}
@@ -110,7 +112,7 @@ y_{\log} = \ln(1 + \text{total\_pay})
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.8\textwidth]{fig9_xgb_importance}
-\caption{XGBoost特征重要性：影响总付费金额的关键驱动因子}
+\caption{XGBoost特征重要性：与总付费金额关联最强的预测因子}
 \label{fig:p2_shap}
 \end{figure}
 \end｜｜DSML｜｜parameter>
