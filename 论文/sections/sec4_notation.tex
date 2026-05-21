@@ -1,0 +1,52 @@
+\section{符号说明}
+
+本文使用的主要符号及其含义见表\ref{tab:notation}。
+
+\begin{table}[H]
+\centering
+\caption{主要符号说明}
+\label{tab:notation}
+\begin{tabular}{c|l}
+\toprule
+\textbf{符号} & \textbf{含义} \\
+\midrule
+$S(t)$         & $t$时刻的生存函数（留存率） \\
+$h(t)$         & $t$时刻的风险函数 \\
+$h_0(t)$       & Cox模型的基准风险函数 \\
+$R_1, R_7, R_{30}$ & 次日、7日、30日留存率 \\
+$\beta_k$       & Cox回归中第$k$个协变量的系数 \\
+$X_k$           & Cox回归中第$k$个特征变量 \\
+$\hat{y}$       & XGBoost模型对总付费金额的预测值 \\
+$N_c$           & 聚类$c$中的用户数量 \\
+$r_c$           & 聚类$c$的留存率 \\
+$\text{ARPU}$   & 每用户平均收入 \\
+$\hat{S}(t)$    & Kaplan-Meier生存函数估计量 \\
+$d_i$           & $t_i$时刻流失的用户数 \\
+$n_i$           & $t_i$时刻处于风险集中的用户数 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+本文涉及的模型相关术语及其英文对照见表\ref{tab:terms}。
+
+\begin{table}[H]
+\centering
+\caption{核心术语中英文对照}
+\label{tab:terms}
+\begin{tabular}{c|c|c}
+\toprule
+\textbf{中文} & \textbf{英文} & \textbf{缩写} \\
+\midrule
+生存分析 & Survival Analysis & SA \\
+Kaplan-Meier估计 & Kaplan-Meier Estimator & KM \\
+Cox比例风险模型 & Cox Proportional Hazards Model & Cox PH \\
+对数秩检验 & Log-Rank Test & --- \\
+K均值聚类 & K-Means Clustering & K-Means \\
+轮廓系数 & Silhouette Score & --- \\
+多目标优化 & Multi-Objective Optimization & MOO \\
+蒙特卡洛模拟 & Monte Carlo Simulation & MC \\
+XGBoost回归 & Extreme Gradient Boosting & XGB \\
+SHAP解释 & SHapley Additive exPlanations & SHAP \\
+\bottomrule
+\end{tabular}
+\end{table}

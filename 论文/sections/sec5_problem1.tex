@@ -1,0 +1,149 @@
+\section{问题1：玩家留存规律与流失预测模型}
+
+\subsection{数据预处理与特征工程}
+
+原始数据由两类文件组成：pickdata1（资源变更记录，33字段）和pickdata2（用户行为事件记录，52字段）。由于数据量庞大（总计约600万行），采用分块读取策略（chunksize=200,000）进行处理。
+
+特征工程流程为：首先按account\_id聚合，提取每名玩家的基本画像特征（注册时间、最后活跃时间、国家、渠道等）；然后从资源变更记录中计算各类资源（粮食、木材、矿石、金币、钻石）的获取量与消耗量；从行为事件记录中提取付费信息（total\_pay）、联盟参与状态（league\_name）、VIP等级等关键字段。最终构建包含39个特征的玩家级特征表。
+
+\subsection{Kaplan-Meier留存率分析}
+
+\subsubsection{模型建立}
+
+Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。定义``流失''为玩家连续2天无任何记录，流失日期为最后一条记录的日期。KM估计量为：
+
+\begin{equation}\label{eq:km}
+\hat{S}(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)
+\end{equation}
+
+其中$d_i$为$t_i$时刻流失的玩家数，$n_i$为$t_i$时刻仍在风险集中的玩家数。该估计量允许数据存在右删失（即在观察期结束时仍未流失的玩家）。
+
+\subsubsection{结果分析}
+
+KM留存曲线如图\ref{fig:p1_km}所示。计算得到各级留存率如下：
+
+\begin{itemize}
+    \item 次日留存率（$R_1$）：\textbf{42.35\%}
+    \item 7日留存率（$R_7$）：\textbf{22.98\%}
+    \item 14日留存率（$R_{14}$）：\textbf{16.24\%}
+    \item 30日留存率（$R_{30}$）：\textbf{7.58\%}
+\end{itemize}
+
+中位生存时间仅为\textbf{1天}，表明超过半数的玩家在注册后24小时内流失，该游戏面临严重的早期留存危机。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{fig1_km_curve}
+\caption{Kaplan-Meier玩家留存曲线（垂直虚线标注关键时间节点及对应留存率）}
+\label{fig:p1_km}
+\end{figure}
+
+\subsection{流失高峰识别}
+
+\subsubsection{模型建立}
+
+为识别流失的关键时间节点，采用Nelson-Aalen估计量计算累积风险函数$H(t)$，进而通过差分得到风险函数$h(t)$的估计：
+
+\begin{equation}
+h(t) = \frac{\text{在}t\text{时刻流失的玩家数}}{\text{在}t\text{时刻仍处于风险集中的玩家数}}
+\end{equation}
+
+对原始风险函数进行3天滑动窗口平滑处理，识别$h(t)$的局部极大值点作为流失高峰。
+
+\subsubsection{结果分析}
+
+风险函数图见图\ref{fig:p1_hazard}。分析结果明确显示：
+
+\begin{itemize}
+    \item \textbf{第2天}是最关键的流失高峰，54.0\%的剩余用户在此流失
+    \item 第3天为次关键节点，流失率为29.9\%
+    \item 第4--6天流失率持续下降但仍较高
+\end{itemize}
+
+这一发现提示运营团队应将最核心的留存干预资源集中在注册后的前48小时内。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{fig2_hazard_rate}
+\caption{玩家流失风险率随时间变化（红色填充，虚线标注峰值位置）}
+\label{fig:p1_hazard}
+\end{figure}
+
+\subsection{分段留存对比分析}
+
+为探究不同玩家群体的留存差异，将玩家按付费状态和联盟参与状态分别进行分层KM分析。结果如图\ref{fig:p1_seg}所示，对比极为显著：
+
+\begin{itemize}
+    \item \textbf{付费玩家} 7日留存率 \textbf{68.0\%} $\quad$ vs $\quad$ \textbf{非付费玩家} 7日留存率 \textbf{21.2\%}（差距3.2倍）
+    \item \textbf{加联盟玩家} 7日留存率 \textbf{61.6\%} $\quad$ vs $\quad$ \textbf{未加联盟玩家} 7日留存率 \textbf{13.4\%}（差距4.6倍）
+\end{itemize}
+
+Log-rank检验结果表明两组差异均具有高度统计显著性（$p < 0.001$）。这一发现具有重要的策略含义：引导新玩家尽早完成首充并加入联盟，是提升整体留存率的最有效杠杆。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig3_segmented_retention}
+\caption{分段留存曲线对比：付费vs非付费（左），加联盟vs未加联盟（右）}
+\label{fig:p1_seg}
+\end{figure}
+
+\subsection{Cox比例风险流失预测模型}
+
+\subsubsection{模型建立}
+
+为实现基于前3天行为数据的留存天数预测，采用Cox比例风险模型。该模型是半参数模型，不要求指定基准风险函数的具体形式，而是将各协变量的影响建模为对基准风险的乘积效应：
+
+\begin{equation}\label{eq:cox}
+h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
+\end{equation}
+
+其中$h_0(t)$为基准风险函数，$X = (X_1, \ldots, X_k)$为协变量向量，$\beta_k$为回归系数。$\exp(\beta_k) > 1$表示该特征增加流失风险（``风险因子''），$\exp(\beta_k) < 1$表示该特征降低流失风险（``保护因子''）。
+
+选取17个表征前3天行为的特征，包括：日均活跃度、等级增长速度、是否付费、是否加联盟、各资源日均消耗量（粮食、木材、矿石、钻石、金币）、资源平衡比（粮食、木材、矿石）、对数化总付费、对数化钻石存量、对数化在线时长、事件类型数与VIP等级。
+
+\subsubsection{模型训练与评估}
+
+将数据集按7:3分层划分为训练集和测试集。采用惩罚似然估计（penalizer=0.1）降低过拟合风险。模型评估指标：
+
+\begin{itemize}
+    \item 一致性指数（C-index）：\textbf{0.9479}（接近1表示判别能力优秀）
+    \item 预测平均绝对误差（MAE）：\textbf{5.03天}
+\end{itemize}
+
+\subsubsection{特征重要性分析}
+
+图\ref{fig:p1_cox}展示了各特征的回归系数及其95\%置信区间。主要发现：
+
+\begin{itemize}
+    \item \textbf{最强保护因子}（$\exp(\beta) < 1$，降低流失风险）：
+    \begin{itemize}
+        \item 事件类型数（n\_event\_types）：$\beta = -0.63$，$p < 0.001$\\
+        行为多样性是留存的最强信号——参与多种游戏活动的玩家更难流失
+        \item 对数化在线时长（log\_duration\_times）：$\beta = -0.41$，$p < 0.001$
+        \item 对数化钻石存量（log\_diamond\_median）：$\beta = -0.37$，$p < 0.001$\\
+        钻石作为稀缺货币的持有量直接反映玩家投入深度
+    \end{itemize}
+    \item \textbf{最强风险因子}（$\exp(\beta) > 1$，增加流失风险）：
+    \begin{itemize}
+        \item 日均活跃度（daily\_activity\_rate）：$\beta = +0.57$，$p < 0.001$\\
+        这一看似反直觉的结果实际上反映了``最后狂欢''效应——\\
+        短期内高强度活动往往是流失前兆
+        \item 等级增长速度（level\_velocity）：$\beta = +0.39$，$p < 0.001$
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig4_cox_coef}
+\caption{Cox模型各特征对流失风险的影响（红色=风险因子，蓝色=保护因子）}
+\label{fig:p1_cox}
+\end{figure}
+
+预测生存天数与实际生存天数的散点图见图\ref{fig:p1_pred}，模型在中等生存时长区间表现良好，对极端长寿用户存在一定的低估。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{fig12_cox_pred}
+\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.95, MAE=5.03天）}
+\label{fig:p1_pred}
+\end{figure}

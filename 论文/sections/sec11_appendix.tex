@@ -1,0 +1,89 @@
+\appendix
+\section{附录}
+
+\subsection{附录A：特征工程流程与字段映射}
+
+原始数据由pickdata1（资源变更记录，33字段）和pickdata2（用户行为事件记录，52字段）组成。表\ref{tab:field_map}列出了关键字段与实际数据来源的映射关系。
+
+\begin{table}[H]
+\centering
+\caption{关键字段映射}
+\label{tab:field_map}
+\begin{tabular}{c|c|c}
+\toprule
+\textbf{题目需求} & \textbf{实际来源} & \textbf{提取方式} \\
+\midrule
+玩家基础信息 & pickdata2: register\_time, total\_pay, current\_level & 按用户聚合取最新值 \\
+登录活跃 & pickdata2: dt, account\_id & 按用户$+$日期聚合 \\
+付费信息 & pickdata2: total\_pay, first\_pay\_time & 取用户级max值 \\
+资源消耗 & pickdata1: resource\_name, change\_type, change\_num & 筛选reduce，按资源名$+$用户聚合 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+特征工程流程如下：
+\begin{enumerate}
+    \item 分块读取pickdata1（1,931,166行）和pickdata2（4,158,533行）
+    \item 按account\_id分组聚合，计算各用户的39个特征
+    \item 输出player\_features.csv（2000行 $\times$ 39列），供后续各问题使用
+\end{enumerate}
+
+\subsection{附录B：策略方案完整表}
+
+完整的五档礼包策略方案见表\ref{tab:full_strategy}。
+
+\begin{table}[H]
+\centering
+\caption{策略方案完整表（5档礼包）}
+\label{tab:full_strategy}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{c|c|c|c|c}
+\toprule
+\textbf{礼包名称} & \textbf{定价(元)} & \textbf{推送时机} & \textbf{触发条件} & \textbf{目标人群} \\
+\midrule
+首充礼包 & 6 & Day 1 & 注册首日自动推送 & 零氪休闲党、微氪月卡党 \\
+资源补给包 & 30 & Day 7 & 活跃$\geq$5天且未付费触发 & 微氪月卡党、中氪战力党 \\
+成长加速包 & 68 & Day 3--5 & 连续2天资源缺口$>$30\% & 中氪战力党 \\
+战力突破包 & 128 & Day 7--10 & 等级停滞（$\geq$3天未升级）& 中氪战力党、高氪核心党 \\
+至尊大礼包 & 328 & Day 1--7 & 注册首周且等级$\geq$5 & 高氪核心党 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{附录C：蒙特卡洛模拟参数设置}
+
+\begin{table}[H]
+\centering
+\caption{蒙特卡洛模拟关键参数}
+\label{tab:mc_params}
+\begin{tabular}{l|c}
+\toprule
+\textbf{参数} & \textbf{设定值} \\
+\midrule
+模拟玩家总数 $N$ & 10,000 \\
+模拟重复次数 & 5,000 \\
+玩家聚类数 $K$ & 6 \\
+礼包数量 & 5 \\
+留存率目标约束 & $\geq$ 10\% \\
+营收优化目标 & $\max$ 总营收 \\
+随机种子 & 42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{附录D：核心代码结构}
+
+项目代码按以下结构组织：
+\begin{verbatim}
+B题/
+  +-- 特征工程.py          # 数据加载与特征提取
+  +-- 问题1_求解.py        # 留存分析(KM+Cox)
+  +-- 问题2_求解.py        # 资源-付费关联分析
+  +-- 问题3_求解.py        # 聚类+蒙特卡洛策略验证
+  +-- 问题4_求解.py        # 数据采集建议
+  +-- nature_figures.py    # Nature风格图表生成
+  +-- data/                # 特征表
+  +-- results/             # 计算结果
+  +-- figures/nature/      # Nature风格双语图表
+\end{verbatim}

@@ -1,0 +1,116 @@
+\section{问题2：资源消耗与付费行为关联分析}
+
+\subsection{资源消耗与等级增长的量化关系}
+
+\subsubsection{分析方法}
+
+为量化玩家每日资源消耗量与等级提升速度的关系，首先计算各玩家的日均资源消耗量：
+
+\begin{equation}
+\text{日均消耗}_r = \frac{\text{资源}r\text{的总消耗量}}{\text{生命周期天数}}
+\end{equation}
+
+其中$r \in \{\text{粮食},\text{木材},\text{矿石},\text{金币},\text{钻石}\}$。采用Pearson相关系数衡量各资源消耗与等级增长（level\_growth）之间的线性关联强度：
+
+\begin{equation}
+r_{XY} = \frac{\sum_{i=1}^{n}(X_i - \bar{X})(Y_i - \bar{Y})}{\sqrt{\sum(X_i - \bar{X})^2}\sqrt{\sum(Y_i - \bar{Y})^2}}
+\label{eq:pearson}
+\end{equation}
+
+\subsubsection{结果分析}
+
+各资源与等级增长的Pearson相关系数如下（所有$p < 0.001$）：
+
+\begin{center}
+\begin{tabular}{c|c|c|c|c|c}
+\toprule
+\textbf{资源} & 粮食 & 木材 & \textbf{矿石} & 钻石（存量） & 钻石（消耗） \\
+\midrule
+$r$ & 0.394 & 0.395 & \textbf{0.504} & 0.277 & 0.379 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+矿石消耗量与等级增长的相关性最强（$r=0.504$），表明矿石是该游戏中最关键的基础资源。钻石存量与等级增长的相关性较弱（$r=0.277$），符合钻石作为稀缺加速货币的定位——其作用不在于日常消耗，而在于突破瓶颈时刻。
+
+图\ref{fig:p2_res}展示了各等级玩家的日均资源消耗量与等级增长速度。研究发现，低等级阶段（1--5级）资源消耗量随等级快速上升，在中等水平后趋于平稳；等级增长速度在前期较快后逐步放缓，符合SLG游戏典型成长曲线。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig5_resource_level}
+\caption{各等级玩家日均资源消耗量（左）与等级增长速度（右）}
+\label{fig:p2_res}
+\end{figure}
+
+\subsection{钻石存量与流失风险}
+
+为研究钻石存量对流失风险的预测作用，将``7天内流失''定义为二分类目标变量（churned = 1 if lifecycle\_days $<$ 7），以对数化钻石存量中位数作为预测变量，建立Logistic回归模型：
+
+\begin{equation}
+P(\text{流失} \mid \text{钻石}) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \cdot \log(1+\text{钻石}))}}
+\end{equation}
+
+模型拟合后，求解$P(\text{流失} \mid \text{钻石}) = 0.5$时的钻石存量值作为风险阈值。结果如下：
+
+\begin{center}
+\fbox{\textbf{钻石存量$<$ 566时，7天内流失概率超过50\%}}
+\end{center}
+
+图\ref{fig:p2_diamond}直观展示了钻石存量分布与流失概率曲线。这一阈值具有直接的操作意义：当监测到玩家钻石存量跌破566时，应触发低价钻石补给礼包推送，以降低流失风险。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig6_diamond_churn}
+\caption{钻石存量分布：留存vs流失玩家（左）与流失概率曲线（右）}
+\label{fig:p2_diamond}
+\end{figure}
+
+\subsection{首次付费分析}
+
+对75名付费用户（占总体的3.8\%）进行分析，主要发现：
+
+\begin{itemize}
+    \item 首付等级：100\%的付费用户首次付费发生在1级（注册初期）
+    \item 付费金额分布：中位数0.99元，75\%分位数1.98元——绝大多数为6元首充档
+    \item 付费金额与留存的关系：高付费组（\$100+）平均生命周期71.0天，低付费组（$<\$6$）平均26.8天\\
+    付费金额越高，生命周期越长，呈现明显的正相关趋势
+\end{itemize}
+
+图\ref{fig:p2_pay}展示了付费金额分布与不同付费水平下的留存时长。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig8_first_pay}
+\caption{付费金额分布（左）与不同付费水平下的平均生命周期（右）}
+\label{fig:p2_pay}
+\end{figure}
+
+\subsection{XGBoost回归分析总付费关键因子}
+
+\subsubsection{模型建立}
+
+为分析影响总付费金额的关键因子，采用XGBoost（Extreme Gradient Boosting）回归模型。由于总付费金额呈极度右偏分布（96.2\%用户付费为0，仅3.8\%有正值），对目标变量进行对数变换：
+
+\begin{equation}
+y_{\log} = \ln(1 + \text{total\_pay})
+\end{equation}
+
+选取25个特征，包括活跃度特征、等级成长特征、资源获取与消耗特征、社交特征和付费特征。训练参数：$n_{\text{estimators}}=200$，$\text{max\_depth}=5$，$\text{learning\_rate}=0.05$。
+
+\subsubsection{特征重要性（SHAP值）}
+
+为解释模型预测，计算SHAP（SHapley Additive exPlanations）值量化各特征对预测结果的边际贡献。图\ref{fig:p2_shap}展示了排名前12的特征重要性。关键发现：
+
+\begin{enumerate}
+    \item \textbf{level\_end（最终等级）}是最重要的付费预测因子——玩家成长深度直接驱动付费需求
+    \item \textbf{diamond\_median（钻石中位存量）}紧随其后——钻石存量是付费意愿和能力的重要代理变量
+    \item \textbf{level\_growth（等级增长量）}、\textbf{diamond\_flow（钻石净流量）}和\textbf{days\_active（活跃天数）}位列前五
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{fig9_xgb_importance}
+\caption{XGBoost特征重要性：影响总付费金额的关键驱动因子}
+\label{fig:p2_shap}
+\end{figure}
+\end｜｜DSML｜｜parameter>

@@ -1,0 +1,87 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 电子科技大学数学建模竞赛 B题 %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt,a4paper]{ctexart}
+
+% ── Page geometry ──
+\usepackage{geometry}
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+% ── Math ──
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{definition}{定义}
+
+% ── Graphics ──
+\usepackage{graphicx}
+\usepackage{float}
+\graphicspath{{../B题/figures/nature/中文版/}}
+\DeclareGraphicsExtensions{.pdf,.png,.jpg}
+
+% ── Tables ──
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+
+% ── Colors ──
+\usepackage[table]{xcolor}
+\definecolor{myblue}{HTML}{0F4D92}
+\definecolor{myred}{HTML}{B64342}
+
+% ── Headers ──
+\usepackage{fancyhdr}
+\setlength{\headheight}{14.5pt}
+\pagestyle{fancy}
+\lhead{电子科技大学数学建模竞赛}
+\rhead{B题}
+\cfoot{\thepage}
+
+% ── Captions ──
+\usepackage{caption}
+\captionsetup[table]{skip=3pt}
+
+% ── Clickable links (load last) ──
+\usepackage[
+    colorlinks=true,
+    linkcolor=myblue,
+    citecolor=black,
+    urlcolor=myblue,
+    bookmarks=true,
+    bookmarksnumbered=true,
+    unicode=true
+]{hyperref}
+
+% ── Title ──
+\title{\vspace{-3cm}\textbf{策略类游戏的用户留存与付费策略优化}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+\large\textbf{摘要}
+\end{center}
+
+\input{sections/sec1_abstract}
+
+\clearpage
+\setcounter{page}{1}
+\pagestyle{fancy}
+\tableofcontents
+\clearpage
+
+\input{sections/sec2_restate}
+\input{sections/sec3_assumptions}
+\input{sections/sec4_notation}
+\input{sections/sec5_problem1}
+\input{sections/sec6_problem2}
+\input{sections/sec7_problem3}
+\input{sections/sec8_problem4}
+\input{sections/sec9_evaluation}
+\input{sections/sec10_references}
+\input{sections/sec11_appendix}
+
+\end{document}

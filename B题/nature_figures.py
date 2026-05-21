@@ -112,13 +112,15 @@ def fig1_km_curve(df):
             days_anno = {1: 'Day 1', 7: 'Day 7', 14: 'Day 14', 30: 'Day 30'}
 
         fig, ax = plt.subplots(figsize=(5, 3.8))
-        kmf.plot_survival_function(ax=ax, ci_show=True, color=PAL["blue"], linewidth=1.5)
+        kmf.plot_survival_function(ax=ax, ci_show=True, color=PAL["blue"], linewidth=1.5, label='')
+        ax.get_legend().remove() if ax.get_legend() else None
         for d, label in days_anno.items():
             surv = kmf.survival_function_at_times(d).values[0]
             ax.axvline(x=d, color=PAL["neutral_mid"], linestyle=':', linewidth=0.6)
             ax.annotate(f'{label}\n{surv*100:.1f}%', xy=(d, surv), xytext=(d+2, surv+0.05),
                        fontsize=5.5, color=PAL["neutral_dark"],
                        arrowprops=dict(arrowstyle='->', color=PAL["neutral_mid"], lw=0.5))
+        ax.set_title(title, fontsize=7.5, fontweight='bold')
         ax.set_xlabel(xl); ax.set_ylabel(yl)
         ax.set_ylim(0, 1.05); ax.set_xlim(0, 65)
         ax.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
@@ -177,13 +179,13 @@ def fig3_segmented_retention(df):
         if lang == 'cn':
             names = {'Paying': '付费玩家', 'Non-Paying': '非付费玩家',
                      'In League': '加联盟', 'No League': '未加联盟'}
-            tl, tr = 'Retention: Paying vs Non-Paying', 'Retention: League vs No League'
-            xl = 'Days'; yl = 'Survival'
+            tl, tr = '留存率：付费 vs 非付费玩家', '留存率：加联盟 vs 未加联盟'
+            xl, yl = '注册后天数', '留存概率'
         else:
             names = {'Paying': 'Paying', 'Non-Paying': 'Non-Paying',
                      'In League': 'In League', 'No League': 'No League'}
-            tl, tr = 'Retention: Pay vs Non-Pay', 'Retention: League vs No League'
-            xl = 'Days'; yl = 'Survival'
+            tl, tr = 'Retention: Paying vs Non-Paying', 'Retention: League vs No League'
+            xl, yl = 'Days Since Registration', 'Survival Probability'
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.2))
 
@@ -379,11 +381,13 @@ def fig7_clustering(df):
 
     for lang, fig_dir in LANGS:
         if lang == 'cn':
-            t1, t2 = '肘部法则', f'轮廓系数 (K={bk})'
-            x1, y1 = 'K', 'Inertia'; x2, y2 = 'K', 'Silhouette'
+            t1, t2 = '肘部法则', f'轮廓系数 (最佳K={bk})'
+            x1, y1 = '聚类数K', '惯性(Inertia)'
+            x2, y2 = '聚类数K', '轮廓系数'
         else:
-            t1, t2 = 'Elbow Method', f'Silhouette (K={bk})'
-            x1, y1 = 'K', 'Inertia'; x2, y2 = 'K', 'Silhouette'
+            t1, t2 = 'Elbow Method', f'Silhouette Analysis (Best K={bk})'
+            x1, y1 = 'Number of Clusters K', 'Inertia'
+            x2, y2 = 'Number of Clusters K', 'Silhouette Score'
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.0))
         ax1.plot(list(Kr), inert, 'o-', color=PAL["blue"], markersize=4, linewidth=1)
@@ -411,11 +415,15 @@ def fig8_first_pay(df):
 
     for lang, fig_dir in LANGS:
         if lang == 'cn':
-            t1, t2 = '付费金额分布', '付费 vs 生命周期'
-            x1, y1 = '总付费($)', '人数'; x2, y2 = '付费分组', '平均生命周期(天)'
+            t1, t2 = '付费金额分布', '付费水平与生命周期关系'
+            x1, y1 = '总付费(美元)', '玩家数'
+            x2, y2 = '付费分组', '平均生命周期(天)'
+            group_labels = ['<6元', '6-30元', '30-100元', '100+元']
         else:
-            t1, t2 = 'Payment Distribution', 'Payment vs Lifecycle'
-            x1, y1 = 'Total Pay ($)', 'Count'; x2, y2 = 'Payment Group', 'Mean Lifecycle (days)'
+            t1, t2 = 'Payment Distribution', 'Payment Level vs Lifecycle'
+            x1, y1 = 'Total Pay (USD)', 'Number of Players'
+            x2, y2 = 'Payment Group', 'Mean Lifecycle (days)'
+            group_labels = ['<$6', '$6-30', '$30-100', '$100+']
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.0))
         ax1.hist(payers['total_pay'].clip(upper=100), bins=25, color=PAL["blue"], alpha=0.85,
@@ -427,7 +435,7 @@ def fig8_first_pay(df):
                 color=[PAL["blue"], PAL["teal"], PAL["orange"], PAL["violet"]],
                 capsize=3, alpha=0.9, edgecolor='white', linewidth=0.3, width=0.6)
         ax2.set_xticks(range(len(groups)))
-        ax2.set_xticklabels(groups['pg'], fontsize=6)
+        ax2.set_xticklabels(group_labels, fontsize=6)
         ax2.set_title(t2, fontsize=7.5, fontweight='bold'); ax2.set_xlabel(x2); ax2.set_ylabel(y2)
         ax2.grid(True, linestyle='--', alpha=0.3, linewidth=0.3, axis='y')
         save_pub(fig, 'fig8_first_pay', fig_dir)

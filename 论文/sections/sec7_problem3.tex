@@ -1,0 +1,130 @@
+\section{问题3：付费策略设计与收益最大化模型}
+
+\subsection{玩家聚类分析}
+
+\subsubsection{聚类方法}
+
+采用K-Means算法对玩家进行聚类，以实现差异化策略设计。选取11个聚类特征：days\_active、lifecycle\_days、level\_end、level\_growth\_rate、is\_paying、total\_pay、is\_in\_league、vip\_level\_max、diamond\_median、total\_get、total\_reduce。对偏态分布特征（total\_pay、diamond\_median等）进行对数变换后，使用StandardScaler标准化至均值0、方差1。
+
+通过肘部法则（Elbow Method）和轮廓系数（Silhouette Score）联合确定最优聚类数：
+
+\begin{equation}
+\text{Silhouette}(k) = \frac{1}{n}\sum_{i=1}^{n}\frac{b(i) - a(i)}{\max\{a(i), b(i)\}}
+\end{equation}
+
+其中$a(i)$为样本$i$到同簇其他样本的平均距离，$b(i)$为到最近异簇所有样本的平均距离。
+
+\subsubsection{聚类结果}
+
+最优聚类数$K=6$（最大轮廓系数为0.490）。6类玩家的特征描述见表\ref{tab:clusters}。
+
+\begin{table}[H]
+\centering
+\caption{六类玩家聚类特征描述}
+\label{tab:clusters}
+\begin{tabular}{c|c|c|c|c|c}
+\toprule
+\textbf{聚类} & \textbf{命名} & \textbf{占比} & \textbf{付费率} & \textbf{平均生命周期} & \textbf{7日留存率} \\
+\midrule
+C1 & 零氪休闲党 & 21.0\% & 0.0\% & $\sim$20天 & 66.9\% \\
+C2+C3 & 零氪流失党 & 74.2\% & 0.0\% & 1--3天 & 0.6--4.0\% \\
+C4 & 微氪月卡党 & 1.6\% & 35.5\% & 57天 & 100\% \\
+C5 & 高氪核心党 & 0.1\% & 100\% & 71天 & 100\% \\
+C6 & 中氪战力党 & 3.1\% & 100\% & 21天 & 63.3\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+图\ref{fig:p3_cluster}展示了肘部法则与轮廓系数曲线，图\ref{fig:p3_3d}以三维散点图呈现聚类在生命周期--对数总付费--最高等级三个维度上的分离效果。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig7_clustering}
+\caption{K-Means肘部法则（左）与轮廓系数曲线（右，最佳$K=6$）}
+\label{fig:p3_cluster}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{fig14_cluster_3d}
+\caption{3D聚类可视化：生命周期-对数总付费-最高等级}
+\label{fig:p3_3d}
+\end{figure}
+
+\subsection{付费策略设计}
+
+基于六类玩家的行为特征和付费规律，设计五档差异化礼包策略，如表\ref{tab:strategy}所示。
+
+\begin{table}[H]
+\centering
+\caption{五档礼包策略方案}
+\label{tab:strategy}
+\begin{tabular}{c|c|c|c|l}
+\toprule
+\textbf{礼包名称} & \textbf{定价(元)} & \textbf{推送时机} & \textbf{触发条件} & \textbf{目标人群} \\
+\midrule
+首充礼包 & 6 & 注册首日 & 自动推送 & 零氪休闲党、微氪月卡党 \\
+资源补给包 & 30 & 活跃$\geq$5天 & 活跃但未付费 & 微氪月卡党、中氪战力党 \\
+成长加速包 & 68 & 第3--5天 & 连续2天资源缺口$>$30\% & 中氪战力党 \\
+战力突破包 & 128 & 第7--10天 & 等级停滞（$\geq$3天未升级）& 中氪战力党、高氪核心党 \\
+至尊大礼包 & 328 & 首周内 & 等级$\geq$5 & 高氪核心党 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{蒙特卡洛模拟验证}
+
+\subsubsection{模拟设计}
+
+为验证策略效果，设计蒙特卡洛模拟如下：
+
+\begin{enumerate}
+    \item \textbf{玩家池生成：}按训练集6类聚类占比，从各聚类的行为分布（生命周期均值/标准差、付费率、$P(\text{购买} \mid \text{礼包})$）中独立抽样生成10,000名模拟玩家。
+    \item \textbf{购买概率估算：}对于每类玩家，基于历史付费率估计基准购买概率，并根据礼包价格进行弹性调整：$P_{\text{eff}} = P_{\text{base}} \times \text{price\_multiplier}$。
+    \item \textbf{留存影响：}假设购买礼包对30日留存率有正向加成效应（+2\%至+6\%，依礼包价值递增）。
+    \item \textbf{模拟次数：}$N = 5,000$次独立重复。
+\end{enumerate}
+
+\subsubsection{模拟结果}
+
+5000次蒙特卡洛模拟结果汇总于表\ref{tab:mc_results}，分布图见图\ref{fig:p3_mc}。
+
+\begin{table}[H]
+\centering
+\caption{蒙特卡洛模拟结果汇总（10,000玩家，30天）}
+\label{tab:mc_results}
+\begin{tabular}{l|c|c}
+\toprule
+\textbf{指标} & \textbf{数值} & \textbf{95\% 置信区间} \\
+\midrule
+期望总营收 & \textbf{22,424元} & [22,198, 22,650] \\
+$P(\text{营收} \geq 70,000)$ & \textbf{0.00\%} & --- \\
+期望30日留存率 & \textbf{11.92\%} & [11.60\%, 12.24\%] \\
+$P(\text{留存率} \geq 10\%)$ & \textbf{100.00\%} & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{fig10_monte_carlo}
+\caption{蒙特卡洛模拟结果：总营收分布（左）与30日留存率分布（右）}
+\label{fig:p3_mc}
+\end{figure}
+
+\subsubsection{结果分析}
+
+\begin{enumerate}
+    \item \textbf{留存约束轻松满足：}30日留存率均值11.92\%，超过10\%目标的概率为100\%。当前策略有效地保留了零氪休闲玩家群体。
+    \item \textbf{营收目标难以达成：}期望营收22,424元，远低于70,000元目标（$P=0.00\%$）。根本原因在于历史数据中付费率仅3.8\%，中位付费额仅0.99元——即使用最优策略对每个付费机会进行精准触发，营收天花板仍受限于玩家的基础付费意愿。
+    \item \textbf{改进方向：}要实现70,000元目标（ARPU=7元），需将付费率从3.8\%提升至约15--20\%或大幅提高客单价。建议引入VIP等级体系、联盟绑定付费机制、限时高价值礼包等更激进的变现策略。
+\end{enumerate}
+
+蒙特卡洛模拟的收敛曲线见图\ref{fig:p3_conv}，表明累计平均营收在约500次模拟后趋于稳定，5000次模拟足以获得稳健估计。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{fig15_mc_convergence}
+\caption{蒙特卡洛模拟收敛曲线（累计平均营收，约500次后稳定）}
+\label{fig:p3_conv}
+\end{figure}
