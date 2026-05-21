@@ -820,7 +820,7 @@ def fig13_xgb_pred(df):
 # Figure 14: 3D Cluster Visualization
 # ═══════════════════════════════════════════════════════════════
 def fig14_cluster_3d(df):
-    """Core claim: Clusters separate clearly along lifecycle, pay, and level axes."""
+    """Core claim: 6 player clusters separate along lifecycle, pay, and level axes."""
     feats = ['days_active','lifecycle_days','level_end','level_growth_rate',
              'is_paying','total_pay','is_in_league','vip_level_max',
              'diamond_median','total_get','total_reduce']
@@ -836,23 +836,60 @@ def fig14_cluster_3d(df):
     lp_idx = dc.columns.get_loc('log_total_pay')
     le_idx = dc.columns.get_loc('level_end')
 
+    # Custom 6-cluster discrete palette (Nature-friendly, distinguishable)
+    cluster_colors = [PAL["blue"], PAL["teal"], PAL["green_dark"],
+                      PAL["orange"], PAL["violet"], PAL["red"]]
+
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
-            title, xl, yl, zl = '3D 玩家聚类', '生命周期', '对数总付费', '最高等级'
+            title, xl, yl, zl = '3D 玩家聚类可视化', '生命周期', '对数总付费', '最高等级'
+            cl = '聚类'
         else:
-            title, xl, yl, zl = '3D Player Clusters', 'Lifecycle', 'Log Total Pay', 'Max Level'
+            title, xl, yl, zl = '3D Player Cluster Visualization', 'Lifecycle', 'Log Total Pay', 'Max Level'
+            cl = 'Cluster'
 
-        fig = plt.figure(figsize=(6, 5))
+        fig = plt.figure(figsize=(7, 5.5))
         ax = fig.add_subplot(111, projection='3d')
-        sc = ax.scatter(Xs[:, lc_idx], Xs[:, lp_idx], Xs[:, le_idx],
-                        c=labels, cmap='viridis', s=10, alpha=0.6, linewidths=0)
-        ax.set_xlabel(f'{xl} (std)', fontsize=6.5, labelpad=6)
-        ax.set_ylabel(f'{yl} (std)', fontsize=6.5, labelpad=6)
-        ax.set_zlabel(f'{zl} (std)', fontsize=6.5, labelpad=6)
-        ax.set_title(title, fontsize=7.5, fontweight='bold', pad=12)
-        ax.tick_params(labelsize=5.5, pad=2)
-        fig.colorbar(sc, ax=ax, label='Cluster' if lang=='en' else '聚类', shrink=0.7, pad=0.08)
+
+        # Plot each cluster separately for discrete colors
+        for c in range(6):
+            mask = labels == c
+            ax.scatter(Xs[mask, lc_idx], Xs[mask, lp_idx], Xs[mask, le_idx],
+                       c=cluster_colors[c], s=18, alpha=0.65, linewidths=0,
+                       label=f'{cl} {c+1}', rasterized=True)
+
+        # Optimal viewing angle
+        ax.view_init(elev=22, azim=-42)
+
+        # Axis labels
+        ax.set_xlabel(f'{xl}\n(std)', fontsize=6.5, labelpad=8)
+        ax.set_ylabel(f'{yl}\n(std)', fontsize=6.5, labelpad=8)
+        ax.set_zlabel(f'{zl}\n(std)', fontsize=6.5, labelpad=8)
+        ax.set_title(title, fontsize=7.5, fontweight='bold', pad=14)
+
+        # Tick formatting
+        ax.tick_params(labelsize=5.5, pad=3, which='major',
+                       direction='out', length=2, width=0.5)
+
+        # Sparse grid
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        ax.xaxis.pane.set_edgecolor(PAL["neutral_light"])
+        ax.yaxis.pane.set_edgecolor(PAL["neutral_light"])
+        ax.zaxis.pane.set_edgecolor(PAL["neutral_light"])
+        ax.grid(True, linestyle=':', alpha=0.15, linewidth=0.3)
+
+        # Legend with cluster labels
+        leg = ax.legend(fontsize=5.5, loc='upper left', ncol=2,
+                        markerscale=1.2, handletextpad=0.5,
+                        columnspacing=0.8, borderpad=0.4)
+        leg.get_frame().set_linewidth(0.4)
+        leg.get_frame().set_facecolor('white')
+        leg.get_frame().set_alpha(0.8)
+
+        plt.tight_layout()
         save_pub(fig, 'fig14_cluster_3d', fig_dir)
         plt.close()
 
