@@ -24,8 +24,6 @@ from lifelines import KaplanMeierFitter, CoxPHFitter, NelsonAalenFitter
 
 # ── Nature Journal RC ──────────────────────────────────────────
 mpl.rcParams.update({
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
     "svg.fonttype": "none",
     "pdf.fonttype": 42,
     "font.size": 7,
@@ -42,6 +40,16 @@ mpl.rcParams.update({
     "ytick.labelsize": 6.5,
     "lines.linewidth": 1.2,
 })
+
+def set_cn_font():
+    """Use SimHei for Chinese glyph coverage."""
+    mpl.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
+    mpl.rcParams['font.family'] = 'sans-serif'
+
+def set_en_font():
+    """Use Arial/DejaVu for Latin glyph coverage."""
+    mpl.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+    mpl.rcParams['font.family'] = 'sans-serif'
 
 # ── Palette ─────────────────────────────────────────────────────
 PAL = {
@@ -102,6 +110,7 @@ def fig1_km_curve(df):
     kmf.fit(T, E)
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             title = 'Kaplan-Meier 玩家留存曲线'
             xl, yl = '注册后天数', '留存概率'
@@ -142,6 +151,7 @@ def fig2_hazard_rate(df):
     top5 = np.argsort(haz_s[1:60])[-5:] + 1
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             title = '玩家流失风险率随时间变化'
             xl, yl = '注册后天数', '风险率'
@@ -176,6 +186,7 @@ def fig3_segmented_retention(df):
     ]
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             names = {'Paying': '付费玩家', 'Non-Paying': '非付费玩家',
                      'In League': '加联盟', 'No League': '未加联盟'}
@@ -256,6 +267,7 @@ def fig4_cox_coefficients(df):
     }
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         sn = short_names_cn if lang == 'cn' else short_names_en
         title = '各特征对流失风险的影响' if lang == 'cn' else 'Feature Impact on Churn Risk'
         xlabel = '回归系数' if lang == 'cn' else 'Coefficient'
@@ -287,6 +299,7 @@ def fig5_resource_level(df):
     ls = ls[(ls['level_end']>0)&(ls['n']>=3)]
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '日均资源消耗 vs 等级', '等级增长速度 vs 等级'
             x1, y1 = '玩家等级', '日均消耗量'
@@ -330,6 +343,7 @@ def fig6_diamond_churn(df):
     thresh = np.expm1(dr[np.argmin(np.abs(probs-0.5))])
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '钻石分布：留 vs 失', f'流失概率 vs 钻石 (阈值≈{thresh:.0f})'
             x1, y1 = 'log(1+钻石)', '密度'
@@ -380,6 +394,7 @@ def fig7_clustering(df):
     bk = list(Kr)[np.argmax(sil)]
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '肘部法则', f'轮廓系数 (最佳K={bk})'
             x1, y1 = '聚类数K', '惯性(Inertia)'
@@ -414,6 +429,7 @@ def fig8_first_pay(df):
     groups = payers.groupby('pg')['lifecycle_days'].agg(['mean','std','count']).reset_index()
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '付费金额分布', '付费水平与生命周期关系'
             x1, y1 = '总付费(美元)', '玩家数'
@@ -473,6 +489,7 @@ def fig9_xgb_importance(df):
     fn_en = {'ri':'Resource Intensity','df':'Diamond Net Flow'}
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         title = '总付费金额关键驱动因子' if lang=='cn' else 'Key Drivers of Total Pay'
         xlabel = '特征重要性' if lang=='cn' else 'Feature Importance'
 
@@ -540,6 +557,7 @@ def fig10_monte_carlo(df):
     revs = np.array(revs); rets = np.array(rets)
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1 = f'营收分布 (均值={revs.mean():.0f}元)'
             t2 = f'留存率分布 (均值={rets.mean()*100:.1f}%)'
@@ -575,6 +593,7 @@ def fig11_active_days(df):
     day_counts = [len(df[df['days_active'] >= d]) for d in days]
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '玩家活跃天数分布', '存活天数累积曲线'
             x1, y1 = '活跃天数', '玩家数'
@@ -635,6 +654,7 @@ def fig12_cox_pred(df):
     mae = mean_absolute_error(actual, pred)
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         title = f'Cox: Predicted vs Actual (C-index={ci:.3f}, MAE={mae:.1f}d)'
         if lang == 'cn':
             title = f'Cox模型: 预测 vs 实际 (C-index={ci:.3f}, MAE={mae:.1f}天)'
@@ -680,6 +700,7 @@ def fig13_xgb_pred(df):
     mae = mean_absolute_error(ye_raw, yp)
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         title = f'XGBoost: Predicted vs Actual (MAE={mae:.2f} USD)'
         if lang == 'cn':
             title = f'XGBoost: 预测 vs 实际 (MAE={mae:.2f}美元)'
@@ -719,6 +740,7 @@ def fig14_cluster_3d(df):
     le_idx = dc.columns.get_loc('level_end')
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             title, xl, yl, zl = '3D 玩家聚类', '生命周期', '对数总付费', '最高等级'
         else:
@@ -781,6 +803,7 @@ def fig15_mc_convergence(df):
     cum = np.cumsum(revs) / np.arange(1, len(revs)+1)
 
     for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             title = '蒙特卡洛收敛曲线'
             xl, yl = '模拟次数', '累计平均营收(元)'
