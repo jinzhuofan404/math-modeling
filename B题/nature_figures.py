@@ -655,20 +655,68 @@ def fig12_cox_pred(df):
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
-        title = f'Cox: Predicted vs Actual (C-index={ci:.3f}, MAE={mae:.1f}d)'
-        if lang == 'cn':
-            title = f'Cox模型: 预测 vs 实际 (C-index={ci:.3f}, MAE={mae:.1f}天)'
-            xl, yl = '实际生存天数', '预测生存天数'
-        else:
-            xl, yl = 'Actual Survival Days', 'Predicted Survival Days'
 
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.scatter(actual, pred, alpha=0.25, s=12, c=PAL["blue"], edgecolors='none')
-        mx = max(actual.max(), np.max(pred))
-        ax.plot([0, mx], [0, mx], '--', color=PAL["neutral_mid"], linewidth=0.8)
-        ax.set_xlabel(xl, fontsize=7); ax.set_ylabel(yl, fontsize=7)
-        ax.set_title(title, fontsize=7.5, fontweight='bold')
-        ax.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
+        events = clean.loc[X_test.index, 'event_churned'].values
+        # Split by event status
+        mask_event = events == 1
+        actual_ev, pred_ev = actual[mask_event], np.array(pred)[mask_event]
+        actual_cens, pred_cens = actual[~mask_event], np.array(pred)[~mask_event]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.8))
+
+        # ── Left: Hexbin of all predictions ──
+        hb = ax1.hexbin(actual, np.array(pred), gridsize=40, cmap='Blues',
+                        mincnt=1, linewidths=0, alpha=0.9)
+        cbar = fig.colorbar(hb, ax=ax1, shrink=0.78, pad=0.02)
+        mx_log = max(actual.max(), np.max(pred))
+        ax1.plot([0, mx_log], [0, mx_log], '--', color=PAL["neutral_dark"],
+                linewidth=0.6, alpha=0.6)
+        if lang == 'cn':
+            ax1.set_xlabel('实际生存天数')
+            ax1.set_ylabel('预测生存天数')
+            ax1.set_title('全量预测（六边形密度图）', fontsize=7, fontweight='bold')
+            cbar.set_label('样本数', fontsize=5.5)
+        else:
+            ax1.set_xlabel('Actual Survival Days')
+            ax1.set_ylabel('Predicted Survival Days')
+            ax1.set_title('All Predictions (hexbin density)', fontsize=7, fontweight='bold')
+            cbar.set_label('Count', fontsize=5.5)
+
+        # ── Right: Scatter by event status ──
+        ax2.scatter(actual_cens, pred_cens, alpha=0.5, s=18,
+                    c=PAL["blue"], edgecolors='white', linewidths=0.2,
+                    label='Censored' if lang == 'en' else '未流失')
+        ax2.scatter(actual_ev, pred_ev, alpha=0.5, s=18,
+                    c=PAL["orange"], edgecolors='white', linewidths=0.2,
+                    label='Churned' if lang == 'en' else '已流失')
+        mx_s = max(actual.max(), np.max(pred)) * 1.05
+        ax2.plot([0, mx_s], [0, mx_s], '--', color=PAL["neutral_dark"],
+                linewidth=0.6)
+        ax2.legend(fontsize=5.5, loc='lower right')
+
+        if lang == 'cn':
+            ax2.set_xlabel('实际生存天数')
+            ax2.set_ylabel('预测生存天数')
+            ax2.set_title(f'按流失状态分层 (C={ci:.3f})', fontsize=7, fontweight='bold')
+        else:
+            ax2.set_xlabel('Actual Survival Days')
+            ax2.set_ylabel('Predicted Survival Days')
+            ax2.set_title(f'By Churn Status (C-index={ci:.3f})', fontsize=7, fontweight='bold')
+
+        # Add metrics text
+        if lang == 'cn':
+            txt = f'MAE: {mae:.1f}天\n流失(n={mask_event.sum()})\n未流失(n={(~mask_event).sum()})'
+        else:
+            txt = f'MAE: {mae:.1f}\nChurned(n={mask_event.sum()})\nCensored(n={(~mask_event).sum()})'
+        ax2.text(0.95, 0.08, txt, transform=ax2.transAxes, fontsize=5.3,
+                verticalalignment='bottom', horizontalalignment='right',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                         edgecolor=PAL["neutral_light"], alpha=0.8))
+
+        for ax in [ax1, ax2]:
+            ax.grid(True, linestyle='--', alpha=0.25, linewidth=0.3)
+
+        plt.tight_layout()
         save_pub(fig, 'fig12_cox_pred', fig_dir)
         plt.close()
 
@@ -677,9 +725,9 @@ def fig12_cox_pred(df):
 # Figure 13: XGBoost Predicted vs Actual
 # ═══════════════════════════════════════════════════════════════
 def fig13_xgb_pred(df):
-    """Core claim: XGBoost on log-transformed pay achieves reasonable accuracy on payers."""
+    """Core claim: XGBoost separates payers from non-payers; accuracy is limited by sparse payers."""
     from sklearn.model_selection import train_test_split
-    from sklearn.metrics import mean_absolute_error
+    from sklearn.metrics import mean_absolute_error, r2_score
 
     feat_cols = ['days_active','lifecycle_days','level_end','level_growth','level_growth_rate',
                  'current_level_max','is_in_league','vip_level_max','n_event_types',
@@ -697,24 +745,73 @@ def fig13_xgb_pred(df):
     model = XGBRegressor(n_estimators=150, max_depth=5, learning_rate=0.05, random_state=RANDOM_SEED, verbosity=0)
     model.fit(X_train, yt_log)
     yp = np.expm1(model.predict(X_test))
-    mae = mean_absolute_error(ye_raw, yp)
+    mae_all = mean_absolute_error(ye_raw, yp)
+
+    # Payer-only stats
+    mask_payer = ye_raw > 0
+    n_payers = mask_payer.sum()
+    mae_payers = mean_absolute_error(ye_raw[mask_payer], yp[mask_payer]) if n_payers > 0 else 0
+    r2_payers = r2_score(ye_raw[mask_payer], yp[mask_payer]) if n_payers > 1 else 0
+
+    # Log-transform for visualization
+    ye_log_vis = np.log1p(ye_raw)
+    yp_log_vis = np.log1p(np.clip(yp, 0, None))
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
-        title = f'XGBoost: Predicted vs Actual (MAE={mae:.2f} USD)'
-        if lang == 'cn':
-            title = f'XGBoost: 预测 vs 实际 (MAE={mae:.2f}美元)'
-            xl, yl = '实际总付费(美元)', '预测总付费(美元)'
-        else:
-            xl, yl = 'Actual Total Pay (USD)', 'Predicted Total Pay (USD)'
 
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.scatter(ye_raw, yp, alpha=0.25, s=12, c=PAL["violet"], edgecolors='none')
-        mx = max(ye_raw.max(), yp.max())
-        ax.plot([0, mx], [0, mx], '--', color=PAL["neutral_mid"], linewidth=0.8)
-        ax.set_xlabel(xl, fontsize=7); ax.set_ylabel(yl, fontsize=7)
-        ax.set_title(title, fontsize=7.5, fontweight='bold')
-        ax.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.8))
+
+        # ── Left panel: hexbin of all predictions (log scale) ──
+        hb = ax1.hexbin(ye_log_vis, yp_log_vis, gridsize=50, cmap='YlOrRd',
+                        mincnt=1, linewidths=0, alpha=0.9)
+        cbar = fig.colorbar(hb, ax=ax1, shrink=0.78, pad=0.02)
+        ax1.plot([0, ye_log_vis.max()], [0, ye_log_vis.max()], '--',
+                color=PAL["neutral_dark"], linewidth=0.6, alpha=0.6)
+        ax1.set_xlabel('Actual log(1+Pay)' if lang == 'en' else '实际 log(1+付费)',
+                       fontsize=6.5)
+        ax1.set_ylabel('Predicted log(1+Pay)' if lang == 'en' else '预测 log(1+付费)',
+                       fontsize=6.5)
+        if lang == 'cn':
+            ax1.set_title('全量预测（对数尺度六边形密度图）', fontsize=7, fontweight='bold')
+            cbar.set_label('样本数', fontsize=5.5)
+        else:
+            ax1.set_title('All Predictions (log-scale hexbin)', fontsize=7, fontweight='bold')
+            cbar.set_label('Count', fontsize=5.5)
+
+        # ── Right panel: scatter of payers only (linear scale) ──
+        ax2.scatter(ye_raw[mask_payer], yp[mask_payer], alpha=0.6, s=25,
+                    c=PAL["orange"], edgecolors='white', linewidths=0.3,
+                    zorder=3)
+        mx_p = max(ye_raw[mask_payer].max(), yp[mask_payer].max()) * 1.1 if n_payers > 0 else 10
+        ax2.plot([0, mx_p], [0, mx_p], '--', color=PAL["neutral_dark"], linewidth=0.6)
+        # Add perfect prediction line label
+        if n_payers > 0:
+            ax2.annotate('y=x', xy=(mx_p*0.85, mx_p*0.83), fontsize=5.5,
+                        color=PAL["neutral_dark"], rotation=35)
+
+        if lang == 'cn':
+            ax2.set_xlabel('实际总付费 (美元)', fontsize=6.5)
+            ax2.set_ylabel('预测总付费 (美元)', fontsize=6.5)
+            ax2.set_title(f'付费玩家预测 (n={n_payers})', fontsize=7, fontweight='bold')
+            # Metrics box
+            txt = f'MAE: {mae_payers:.2f}\nR2: {r2_payers:.3f}'
+        else:
+            ax2.set_xlabel('Actual Total Pay (USD)', fontsize=6.5)
+            ax2.set_ylabel('Predicted Total Pay (USD)', fontsize=6.5)
+            ax2.set_title(f'Payers Only (n={n_payers})', fontsize=7, fontweight='bold')
+            txt = f'MAE: {mae_payers:.2f}\nR2: {r2_payers:.3f}'
+
+        if n_payers > 0:
+            ax2.text(0.95, 0.08, txt, transform=ax2.transAxes, fontsize=5.5,
+                    verticalalignment='bottom', horizontalalignment='right',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                             edgecolor=PAL["neutral_light"], alpha=0.8))
+
+        for ax in [ax1, ax2]:
+            ax.grid(True, linestyle='--', alpha=0.25, linewidth=0.3)
+
+        plt.tight_layout()
         save_pub(fig, 'fig13_xgb_pred', fig_dir)
         plt.close()
 
