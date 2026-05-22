@@ -290,26 +290,27 @@ def fig4_cox_coefficients(df):
 # Figure 5: Resource-Level Elasticity
 # ═══════════════════════════════════════════════════════════════
 def fig5_resource_level(df):
-    """Core claim: Stone consumption correlates most with level growth (r=0.50)."""
+    """Core claim: Level growth rate drops ~73% from low to high levels — bottleneck exists."""
     df = df.copy()
+    df['daily_growth'] = df['level_growth'] / df['lifecycle_days'].clip(lower=1)
     for c in ['daily_food','daily_wood','daily_stone']:
         df[c] = df[f'{c.split("_")[1]}_reduce'] / df['lifecycle_days'].clip(lower=1)
     ls = df.groupby('level_end').agg(n=('account_id','count'),
-        gf=('level_growth','mean'), df=('daily_food','mean'),
+        gf=('daily_growth','mean'), df=('daily_food','mean'),
         dw=('daily_wood','mean'), ds=('daily_stone','mean')).reset_index()
     ls = ls[(ls['level_end']>0)&(ls['n']>=3)]
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
-            t1, t2 = '日均资源消耗 vs 等级', '等级增长速度 vs 等级'
+            t1, t2 = '日均资源消耗 vs 等级', '日均等级增长速度 vs 等级'
             x1, y1 = '玩家等级', '日均消耗量'
-            x2, y2 = '玩家等级', '平均等级增长'
+            x2, y2 = '玩家等级', '日均等级增长(级/天)'
             rl = {'Food':'粮食','Wood':'木材','Stone':'矿石'}
         else:
-            t1, t2 = 'Resource Use vs Level', 'Level Growth Rate vs Level'
+            t1, t2 = 'Resource Use vs Level', 'Daily Growth Rate vs Level'
             x1, y1 = 'Player Level', 'Mean Daily Use'
-            x2, y2 = 'Player Level', 'Mean Growth'
+            x2, y2 = 'Player Level', 'Daily Growth (levels/day)'
             rl = {}
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.2))
