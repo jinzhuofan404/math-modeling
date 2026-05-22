@@ -30,26 +30,31 @@
 
 \subsection{附录B：策略方案完整表}
 
-完整的五档礼包策略方案见表\ref{tab:full_strategy}。
+探索方案（混合v5）的完整8档礼包策略方案见表\ref{tab:full_strategy}。
 
 \begin{table}[H]
 \centering
-\caption{策略方案完整表（5档礼包）}
+\caption{探索方案策略完整表（8档礼包）}
 \label{tab:full_strategy}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{c|c|c|c|c}
 \toprule
 \textbf{礼包名称} & \textbf{定价(元)} & \textbf{推送时机} & \textbf{触发条件} & \textbf{目标人群} \\
 \midrule
-首充礼包 & 6 & Day 1 & 注册首日自动推送 & 零氪休闲党、微氪月卡党 \\
-资源补给包 & 30 & Day 7 & 活跃$\geq$5天且未付费触发 & 微氪月卡党、中氪战力党 \\
-成长加速包 & 68 & Day 3--5 & 连续2天资源缺口$>$30\% & 中氪战力党 \\
-战力突破包 & 128 & Day 7--10 & 等级停滞（$\geq$3天未升级）& 中氪战力党、高氪核心党 \\
-至尊大礼包 & 328 & Day 1--7 & 注册首周且等级$\geq$5 & 高氪核心党 \\
+免费挽留包 & 0 & Day 1--30 & Lost Cause象限 & 零氪流失党 \\
+首充礼包 & 6 & Day 1 & Persuadable, 注册首日 & 零氪休闲党、中氪战力党 \\
+新手补给 & 12 & Day 3 & Persuadable, 活跃$\geq$2天未付费 & 零氪休闲党、零氪流失党 \\
+资源补给包 & 30 & Day 7 & Persuadable, 活跃$\geq$5天或钻石$<$566 & 中氪战力党 \\
+成长加速包 & 68 & Day 10 & Persuadable, 连续2天资源缺口$>$30\% & 中氪战力党 \\
+战力突破包 & 128 & Day 14 & Persuadable, 等级停滞$\geq$3天 & 中氪战力党、高氪核心党 \\
+至尊大礼包 & 328 & Day 21 & Persuadable高氪, 等级$\geq$10且已购$\geq$68元包 & 高氪核心党 \\
+传说大礼包 & 648 & Day 28 & Persuadable高氪, 已购328元包 & 高氪核心党 \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
+
+注：零氪用户四象限分类（Persuadable 60\%/20\%、Sleeping Dog 5\%、Lost Cause 35\%/75\%），付费用户全量推送无象限区分。状态触发：生命周期$<$3天跳过$>$30元，高氪跳过$<$30元，已购$\geq$128元跳过$<$68元。
 
 \subsection{附录C：蒙特卡洛模拟参数设置}
 
@@ -64,9 +69,10 @@
 模拟玩家总数 $N$ & 10,000 \\
 模拟重复次数 & 5,000 \\
 玩家聚类数 $K$ & 6 \\
-礼包数量 & 5 \\
+礼包数量 & 8（含免费挽留包） \\
+三方案 & 基线 / 保守方案 / 探索方案 \\
 留存率目标约束 & $\geq$ 10\% \\
-营收优化目标 & $\max$ 总营收 \\
+营收优化目标 & $\max$ 总营收（目标70,000元） \\
 随机种子 & 42 \\
 \bottomrule
 \end{tabular}
