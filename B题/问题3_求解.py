@@ -243,12 +243,11 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
         if sim_idx % 1000 == 0 and sim_idx > 0:
             print(f'  Progress: {sim_idx}/{N_MC_SIMS}')
         total_revenue, retained = 0, 0
-        for c, (cp, n_players) in enumerate(zip(cluster_profiles, cluster_sizes)):
-            cd = cluster_dists[c]
+        for c, (cp, n_players) in enumerate(zip(cluster_profiles, cl_sizes)):
+            cd = cl_dists[c]
             base_pay_prob = cd['pay_rate']
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
-                ret_base = np.random.random() < cd['retention_base']
                 organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < base_pay_prob else 0
                 strategy_rev, strategy_ret_boost = 0, 0
                 for gp in gift_packs:
@@ -256,7 +255,7 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
                         strategy_rev += gp['price']
                         strategy_ret_boost += gp['ret_boost']
                 total_revenue += organic_pay + strategy_rev
-                if np.random.random() < min(0.99, cd['retention_base'] + strategy_ret_boost) or ret_base:
+                if np.random.random() < min(0.99, cd['retention_base'] + strategy_ret_boost):
                     retained += 1
         sim_revenues.append(total_revenue)
         sim_retentions.append(retained / N_SIM_PLAYERS)
@@ -283,13 +282,14 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
     # λ_c: how much more likely cluster c is to purchase when actively pushed
     # vs. their organic pay rate. Based on: (1) intra-cluster pay willingness,
     # (2) SLG industry first-purchase conversion benchmarks (10-20%).
+    # Cluster names from data/cluster_name_map.csv (K-Means, random_state=42)
     lambda_c = {
         0: 0.15,  # 零氪休闲党: active but never paid → 15% first-purchase conversion
         1: 0.05,  # 零氪流失党: fast churn, reachable only Day1 → 5% baseline
         2: 0.05,  # 零氪流失党: same
-        3: 1.20,  # 微氪月卡党: already paying → 20% uplift on organic
+        3: 1.20,  # 中氪战力党: 35.5% pay rate → 20% uplift on organic
         4: 1.50,  # 高氪核心党: proven willingness → 50% uplift (scarcity/limited packs)
-        5: 1.30,  # 中氪战力党: paying → 30% uplift
+        5: 1.30,  # 中氪战力党: 100% pay rate → 30% uplift
     }
 
     # ── Gift packs ──
@@ -349,13 +349,12 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
         if sim_idx % 1000 == 0 and sim_idx > 0:
             print(f'  Progress: {sim_idx}/{N_MC_SIMS}')
         total_revenue, retained = 0, 0
-        for c, (cp, n_players) in enumerate(zip(cluster_profiles, cluster_sizes)):
-            cd = cluster_dists[c]
+        for c, (cp, n_players) in enumerate(zip(cluster_profiles, cl_sizes)):
+            cd = cl_dists[c]
             ranked = cluster_ranked[c]
 
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
-                ret_base = np.random.random() < cd['retention_base']
                 organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
                 strategy_rev, n_pushes, total_price = 0, 0, 0
                 for gp, pp in ranked:
@@ -370,7 +369,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
                 ret_penalty = lam_pen * n_pushes + mu_pen * total_price / 100
                 ret_boost = min(0.04, 0.008 * n_pushes)
                 total_revenue += organic_pay + strategy_rev
-                if np.random.random() < min(0.99, cd['retention_base'] + ret_boost - ret_penalty) or ret_base:
+                if np.random.random() < min(0.99, cd['retention_base'] + ret_boost - ret_penalty):
                     retained += 1
         sim_revenues.append(total_revenue)
         sim_retentions.append(retained / N_SIM_PLAYERS)
@@ -439,15 +438,20 @@ def generate_strategy_schedule(cluster_profiles):
     print('3.4 Strategy Schedule')
     print('=' * 50)
 
+    # ── Trigger conditions integrate Problem 1 (churn risk) & Problem 2 (diamond threshold 566) ──
     gift_packs = [
         {'name_cn': '首充礼包', 'name_en': 'First Purchase Pack', 'price': 6,
          'timing_cn': 'Day 1', 'timing_en': 'Day 1',
          'trigger_cn': '注册首日自动推送', 'trigger_en': 'Auto on registration day',
-         'targets': ['F2P Casual', 'Light Spender']},
+         'targets': ['F2P Casual', 'Mid Spender']},
+        {'name_cn': '新手补给', 'name_en': 'Novice Supply Pack', 'price': 12,
+         'timing_cn': 'Day 3', 'timing_en': 'Day 3',
+         'trigger_cn': '活跃>=2天且未付费触发', 'trigger_en': 'Active>=2d & no payment',
+         'targets': ['F2P Casual', 'F2P Churner']},
         {'name_cn': '资源补给包', 'name_en': 'Resource Supply Pack', 'price': 30,
          'timing_cn': 'Day 7', 'timing_en': 'Day 7',
-         'trigger_cn': '活跃>=5天且未付费触发', 'trigger_en': 'Active>=5d & no payment',
-         'targets': ['Light Spender', 'Mid Spender']},
+         'trigger_cn': '活跃>=5天且未付费, 或钻石存量<566触发 (问题2流失阈值)', 'trigger_en': 'Active>=5d & no payment, or diamond<566 (P2 churn threshold)',
+         'targets': ['Mid Spender']},
         {'name_cn': '成长加速包', 'name_en': 'Growth Accelerator', 'price': 68,
          'timing_cn': 'Day 3-5', 'timing_en': 'Day 3-5',
          'trigger_cn': '连续2天资源缺口>30%', 'trigger_en': '2-day resource gap >30%',
