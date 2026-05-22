@@ -517,71 +517,57 @@ def fig9_xgb_importance(df):
 # Figure 10: Monte Carlo Results
 # ═══════════════════════════════════════════════════════════════
 def fig10_monte_carlo(df):
-    """Core claim: Retention target is met (100%), but revenue target (70K) is unreachable."""
-    np.random.seed(RANDOM_SEED)
-    # Quick clustering
-    dc = df[['days_active','lifecycle_days','level_end','level_growth_rate',
-             'is_paying','total_pay','is_in_league','vip_level_max','diamond_median',
-             'total_get','total_reduce']].copy().replace([np.inf,-np.inf],np.nan).fillna(0)
-    for c in ['total_pay','diamond_median','total_get','total_reduce']:
-        dc[f'log_{c}']=np.log1p(dc[c].clip(0)); del dc[c]
-    Xs = StandardScaler().fit_transform(dc)
-    km = KMeans(n_clusters=6, random_state=RANDOM_SEED, n_init=10)
-    labels = km.fit_predict(Xs)
-    df['cl'] = labels
-
-    profiles = []
-    for c in range(6):
-        s = df[df['cl']==c]
-        profiles.append({'pct':len(s)/len(df), 'pay_rate':s['is_paying'].mean(),
-                         'ml':s['lifecycle_days'].mean(), 'mp':max(0.1,s['total_pay'].mean()),
-                         'r30':(s['lifecycle_days']>=30).mean(), 'ls':s['lifecycle_days'].std()})
-
-    # MC sim (2000 iterations for speed)
-    N, TGT, TR = 10000, 70000, 0.10
-    revs, rets = [], []
-    gifts = [{'p':6,'m':1.0,'rb':0.02},{'p':30,'m':0.4,'rb':0.03},
-             {'p':68,'m':0.15,'rb':0.04},{'p':128,'m':0.05,'rb':0.05},{'p':328,'m':0.01,'rb':0.06}]
-    for _ in range(2000):
-        trv, trt = 0, 0
-        for cp in profiles:
-            n = max(1, int(cp['pct']*N))
-            for __ in range(n):
-                bp = np.random.random()<cp['pay_rate']
-                op = np.random.exponential(cp['mp']) if bp else 0
-                sr, srb = 0, 0
-                for g in gifts:
-                    if np.random.random()<max(0.0005, cp['pay_rate']*g['m']):
-                        sr+=g['p']; srb+=g['rb']
-                trv += op+sr
-                if np.random.random()<min(0.99,cp['r30']+srb):
-                    trt+=1
-        revs.append(trv); rets.append(trt/N)
-    revs = np.array(revs); rets = np.array(rets)
+    """Problem 3: Three-scheme MC comparison (baseline / conservative / exploration)."""
+    # Final 5000-MC results (hardcoded from _final_run.py)
+    schemes = [
+        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 5605,  'ret': 7.1},
+        {'name_cn': '保守\n(主方案)',   'name_en': 'Conservative\n(Main)', 'rev': 26270, 'ret': 7.2},
+        {'name_cn': '探索\n(混合v5)',   'name_en': 'Exploration\n(Hybrid)', 'rev': 25681, 'ret': 10.0},
+    ]
+    colors = [PAL["neutral_dark"], PAL["blue"], PAL["green_dark"]]
+    target_rev, target_ret = 70000, 10.0
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
-            t1 = f'营收分布 (均值={revs.mean():.0f}元)'
-            t2 = f'留存率分布 (均值={rets.mean()*100:.1f}%)'
-            x1, y1 = '总营收(元)', '密度'; x2, y2 = '30日留存率(%)', '密度'
+            t1 = '三方案期望营收对比';            t2 = '三方案期望留存率对比'
+            y1 = '期望营收 (元)';                  y2 = '30日留存率 (%)'
+            names = [s['name_cn'] for s in schemes]
+            tg_label = '目标: 70,000元'
+            tg_ret_label = '目标: 10%'
         else:
-            t1 = f'Revenue (Mean={revs.mean():.0f} CNY)'
-            t2 = f'Retention (Mean={rets.mean()*100:.1f}%)'
-            x1, y1 = 'Total Revenue (CNY)', 'Density'; x2, y2 = '30-Day Retention (%)', 'Density'
+            t1 = 'Expected Revenue by Scheme';     t2 = 'Expected Retention by Scheme'
+            y1 = 'Expected Revenue (CNY)';         y2 = '30-Day Retention (%)'
+            names = [s['name_en'] for s in schemes]
+            tg_label = 'Target: 70K CNY'
+            tg_ret_label = 'Target: 10%'
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.0))
-        ax1.hist(revs, bins=50, color=PAL["blue"], alpha=0.85, density=True, edgecolor='white', linewidth=0.3)
-        ax1.axvline(x=TGT, color=PAL["red"], linestyle='--', linewidth=0.8)
-        ax1.axvline(x=revs.mean(), color=PAL["neutral_dark"], linestyle='-', linewidth=0.8)
-        ax1.set_title(t1, fontsize=7.5, fontweight='bold'); ax1.set_xlabel(x1); ax1.set_ylabel(y1)
-        ax1.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
+        rev_vals = [s['rev'] for s in schemes]
+        ret_vals = [s['ret'] for s in schemes]
+        xs = range(len(schemes))
 
-        ax2.hist(rets*100, bins=50, color=PAL["green_dark"], alpha=0.85, density=True, edgecolor='white', linewidth=0.3)
-        ax2.axvline(x=TR*100, color=PAL["red"], linestyle='--', linewidth=0.8)
-        ax2.axvline(x=rets.mean()*100, color=PAL["neutral_dark"], linestyle='-', linewidth=0.8)
-        ax2.set_title(t2, fontsize=7.5, fontweight='bold'); ax2.set_xlabel(x2); ax2.set_ylabel(y2)
-        ax2.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
+        # Revenue bars
+        bars1 = ax1.bar(xs, rev_vals, color=colors, alpha=0.85, edgecolor='white', linewidth=0.5, width=0.5)
+        ax1.axhline(y=target_rev, color=PAL["red"], linestyle='--', linewidth=0.8, label=tg_label)
+        ax1.set_xticks(xs); ax1.set_xticklabels(names, fontsize=7)
+        ax1.set_title(t1, fontsize=7.5, fontweight='bold'); ax1.set_ylabel(y1, fontsize=7)
+        for i, (v, b) in enumerate(zip(rev_vals, bars1)):
+            ax1.text(i, v + 600, f'{v:,}', ha='center', fontsize=7, fontweight='bold', color=colors[i])
+        ax1.legend(fontsize=6)
+        ax1.grid(True, linestyle='--', alpha=0.3, linewidth=0.3, axis='y')
+
+        # Retention bars
+        bars2 = ax2.bar(xs, ret_vals, color=colors, alpha=0.85, edgecolor='white', linewidth=0.5, width=0.5)
+        ax2.axhline(y=target_ret, color=PAL["red"], linestyle='--', linewidth=0.8, label=tg_ret_label)
+        ax2.set_xticks(xs); ax2.set_xticklabels(names, fontsize=7)
+        ax2.set_title(t2, fontsize=7.5, fontweight='bold'); ax2.set_ylabel(y2, fontsize=7)
+        for i, (v, b) in enumerate(zip(ret_vals, bars2)):
+            ax2.text(i, v + 0.3, f'{v:.1f}%', ha='center', fontsize=7, fontweight='bold', color=colors[i])
+        ax2.legend(fontsize=6)
+        ax2.grid(True, linestyle='--', alpha=0.3, linewidth=0.3, axis='y')
+
+        plt.tight_layout()
         save_pub(fig, 'fig10_monte_carlo', fig_dir)
         plt.close()
 
