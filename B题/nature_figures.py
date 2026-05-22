@@ -154,7 +154,11 @@ def fig2_hazard_rate(df):
     haz = naf.cumulative_hazard_.diff().fillna(0)
     haz_s = haz.rolling(window=3, center=True).mean().values.flatten()
     days_arr = haz.index.values
-    top5 = np.argsort(haz_s[1:60])[-5:] + 1
+    # Filter by actual day value, not array index (early days have many events/packed indices)
+    day_mask = days_arr <= 30
+    days_plot = days_arr[day_mask]
+    haz_plot = haz_s[day_mask]
+    top5 = np.argsort(haz_plot[1:])[-5:] + 1
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
@@ -165,13 +169,13 @@ def fig2_hazard_rate(df):
             title = 'Player Churn Hazard Rate Over Time'
             xl, yl = 'Days Since Registration', 'Hazard Rate'
         fig, ax = plt.subplots(figsize=(5, 3.2))
-        ax.fill_between(days_arr[1:60], haz_s[1:60], alpha=0.15, color=PAL["red"])
-        ax.plot(days_arr[1:60], haz_s[1:60], color=PAL["red"], linewidth=1.2)
+        ax.fill_between(days_plot[1:], haz_plot[1:], alpha=0.15, color=PAL["red"])
+        ax.plot(days_plot[1:], haz_plot[1:], color=PAL["red"], linewidth=1.2)
         for p in top5:
-            ax.axvline(x=days_arr[p], color=PAL["red"], linestyle=':', linewidth=0.5, alpha=0.6)
+            ax.axvline(x=days_plot[p], color=PAL["red"], linestyle=':', linewidth=0.5, alpha=0.6)
         ax.set_title(title, fontsize=7.5, fontweight='bold')
         ax.set_xlabel(xl); ax.set_ylabel(yl)
-        ax.set_xlim(0, 60)
+        ax.set_xlim(0, 30)
         ax.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
         save_pub(fig, 'fig2_hazard_rate', fig_dir)
         plt.close()
@@ -460,7 +464,8 @@ def fig8_first_pay(df):
 # Figure 9: XGBoost Feature Importance
 # ═══════════════════════════════════════════════════════════════
 def fig9_xgb_importance(df):
-    """Core claim: Level_end and diamond_median are strongest pay predictors."""
+    """Core claim: Level_end and diamond_median are strongest pay predictors (SHAP-based)."""
+    import shap
     feat_cols = ['days_active','lifecycle_days','level_end','level_growth','level_growth_rate',
                  'current_level_max','is_in_league','vip_level_max','n_event_types',
                  'food_get','food_reduce','wood_get','wood_reduce','stone_get','stone_reduce',
@@ -475,8 +480,12 @@ def fig9_xgb_importance(df):
     X, y = dm[all_f], np.log1p(dm['total_pay'])
     model = XGBRegressor(n_estimators=150, max_depth=5, learning_rate=0.05, random_state=RANDOM_SEED, verbosity=0)
     model.fit(X, y)
-    imp = model.feature_importances_
-    ti = np.argsort(imp)[-12:][::-1]
+
+    # SHAP-based importance (not built-in gain importance)
+    explainer = shap.TreeExplainer(model)
+    shap_vals = explainer.shap_values(X)
+    shap_mean = np.abs(shap_vals).mean(axis=0)  # mean |SHAP| for each feature
+    ti = np.argsort(shap_mean)[-12:][::-1]
 
     fn_cn = {'days_active':'活跃天数','lifecycle_days':'生命周期','level_end':'最终等级',
              'level_growth':'等级增长','level_growth_rate':'等级增速','current_level_max':'最高等级',
@@ -489,8 +498,8 @@ def fig9_xgb_importance(df):
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
-        title = '总付费金额关键驱动因子' if lang=='cn' else 'Key Drivers of Total Pay'
-        xlabel = '特征重要性' if lang=='cn' else 'Feature Importance'
+        title = 'XGBoost+SHAP：总付费关键驱动因子' if lang=='cn' else 'XGBoost+SHAP: Key Drivers of Total Pay'
+        xlabel = '平均|SHAP值|' if lang=='cn' else 'Mean |SHAP| Value'
 
         fig, ax = plt.subplots(figsize=(5, 3.5))
         names = []
@@ -499,7 +508,7 @@ def fig9_xgb_importance(df):
                 names.append(fn_cn.get(f, f))
             else:
                 names.append(fn_en.get(f, f))
-        vals = imp[ti][::-1]
+        vals = shap_mean[ti][::-1]
         ax.barh(range(len(names)), vals, color=PAL["blue"], alpha=0.85, height=0.65)
         ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=6)
         ax.set_xlabel(xlabel, fontsize=7)

@@ -101,12 +101,13 @@ y_{\log} = \ln(1 + \text{total\_pay})
 
 \subsubsection{特征重要性（SHAP值）}
 
-为解释模型预测，计算SHAP（SHapley Additive exPlanations）值量化各特征对预测结果的边际贡献。图\ref{fig:p2_shap}展示了排名前12的特征重要性。关键发现：
+为解释模型预测，计算SHAP（SHapley Additive exPlanations）值量化各特征对预测结果的边际贡献。图\ref{fig:p2_shap}展示了排名前12的特征（按平均|SHAP值|排序）。关键发现：
 
 \begin{enumerate}
-    \item \textbf{level\_end（最终等级）}是最重要的付费预测因子——玩家成长深度与付费需求之间存在强关联
-    \item \textbf{diamond\_median（钻石中位存量）}紧随其后——钻石存量是付费意愿和能力的重要代理变量
-    \item \textbf{level\_growth（等级增长量）}、\textbf{diamond\_flow（钻石净流量）}和\textbf{days\_active（活跃天数）}位列前五
+    \item \textbf{diamond\_flow（钻石净流量）}是最重要的付费预测因子——钻石的获取与消耗差额直接反映付费后的资源转化行为，是模型中最强的付费信号
+    \item \textbf{n\_event\_types（事件类型数）}紧随其后——参与游戏活动种类越多的玩家，接触付费场景的概率越高，付费潜力越大
+    \item \textbf{food\_get（粮食获取量）}和\textbf{total\_get（总资源获取量）}分列第三、四位——资源获取总量是玩家投入度的综合代理，高投入玩家更有动力为加速进度而付费
+    \item \textbf{level\_end（最终等级）}位列第五——等级并非直接驱动付费，而是长期投入的自然结果；SHAP分析表明其预测贡献低于资源流动特征
 \end{enumerate}
 
 \begin{figure}[H]
