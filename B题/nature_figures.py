@@ -370,6 +370,7 @@ def fig6_diamond_churn(df):
         ax2.axhline(y=0.5, color=PAL["neutral_mid"], linestyle=':', linewidth=0.6)
         ax2.axvline(x=thresh, color=PAL["red"], linestyle=':', linewidth=0.6)
         ax2.set_title(t2, fontsize=7.5, fontweight='bold'); ax2.set_xlabel(x2); ax2.set_ylabel(y2)
+        ax2.set_xlim(0, min(max(np.expm1(dr)), 3000))  # zoom to meaningful range
         ax2.grid(True, linestyle='--', alpha=0.3, linewidth=0.3)
         save_pub(fig, 'fig6_diamond_churn', fig_dir)
         plt.close()
