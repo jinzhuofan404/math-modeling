@@ -91,13 +91,19 @@ def save_pub(fig, filename, fig_dir):
 
 
 def load_data():
-    path = os.path.join(DATA_DIR, 'player_features.csv')
-    if not os.path.exists(path):
-        path = os.path.join(DATA_DIR, 'player_features_slim.csv')
-    df = pd.read_csv(path)
-    df['duration'] = df['lifecycle_days'].clip(upper=90)
-    df['event_churned'] = ((df['days_active'] < 20) & (df['lifecycle_days'] < 30)).astype(int)
-    return df
+    """Load both tables: df_full (P2/P3, full-cycle) and df_d3 (P1, Day3-corrected)."""
+    path_full = os.path.join(DATA_DIR, 'player_features.csv')
+    if not os.path.exists(path_full):
+        path_full = os.path.join(DATA_DIR, 'player_features_slim.csv')
+    df_full = pd.read_csv(path_full)
+
+    path_d3 = os.path.join(DATA_DIR, 'player_features_day3.csv')
+    if os.path.exists(path_d3):
+        df_d3 = pd.read_csv(path_d3)
+    else:
+        df_d3 = df_full.copy()
+        df_d3['duration'] = df_d3['lifecycle_days'].clip(upper=90)
+    return df_full, df_d3
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -220,56 +226,46 @@ def fig3_segmented_retention(df):
 # Figure 4: Cox Coefficients
 # ═══════════════════════════════════════════════════════════════
 def fig4_cox_coefficients(df):
-    """Core claim: Event diversity, playtime, and diamond stock protect against churn."""
-    df2 = df.copy()
-    df2['daily_ar'] = df2['total_records'] / df2['lifecycle_days'].clip(lower=1)
-    df2['level_v'] = df2['level_growth_rate']
-    for r in ['food','wood','stone','diamond','coins']:
-        df2[f'd_{r}'] = df2[f'{r}_reduce'] / df2['lifecycle_days'].clip(lower=1)
-    for r in ['food','wood','stone']:
-        df2[f'{r}_bal'] = df2[f'{r}_get'] / df2[f'{r}_reduce'].clip(lower=1)
-    for c in ['total_pay','diamond_median','duration_times']:
-        df2[f'log_{c}'] = np.log1p(df2[c])
-    feats = ['daily_ar','level_v','is_paying','is_in_league',
-             'd_food','d_wood','d_stone','d_diamond','d_coins',
-             'food_bal','wood_bal','stone_bal',
-             'log_total_pay','log_diamond_median','log_duration_times',
-             'n_event_types','vip_level_max']
-    clean = df2.dropna(subset=feats+['duration','event_churned'])
-    X = clean[feats]; X = X[~X.isin([np.inf,-np.inf]).any(axis=1)]
-    scl = StandardScaler(); Xs = pd.DataFrame(scl.fit_transform(X), columns=feats, index=X.index)
+    """Core claim: Day3 features predict churn; event diversity & diamond protect."""
+    # Use strict Day3 features (consistent with paper sec5)
+    feature_cols = [
+        'days_logged_d3', 'level_d3', 'level_change_d3', 'avg_duration_d3',
+        'food_reduce_d3', 'wood_reduce_d3', 'stone_reduce_d3',
+        'diamond_reduce_d3', 'coins_reduce_d3',
+        'diamond_d3', 'gold_d3',
+        'is_pay_d3', 'is_league_d3', 'n_event_types_d3',
+    ]
+    clean = df.dropna(subset=feature_cols+['duration','event_churned'])
+    X = clean[feature_cols]; X = X[~X.isin([np.inf,-np.inf]).any(axis=1)]
+    scl = StandardScaler(); Xs = pd.DataFrame(scl.fit_transform(X), columns=feature_cols, index=X.index)
     td = pd.concat([Xs, clean.loc[Xs.index, ['duration','event_churned']]], axis=1)
     cph = CoxPHFitter(penalizer=0.1)
     cph.fit(td, duration_col='duration', event_col='event_churned', show_progress=False)
     coef_df = cph.summary[['coef','exp(coef)']].sort_values('coef')
-    # Bilingual feature names
+
     short_names_cn = {
-        'n_event_types':'事件类型数', 'log_duration_times':'在线时长(对数)',
-        'log_diamond_median':'钻石存量(对数)', 'is_in_league':'加入联盟',
-        'd_diamond':'日均钻石消耗', 'vip_level_max':'VIP等级',
-        'stone_bal':'矿石平衡比', 'd_coins':'日均金币消耗',
-        'is_paying':'是否付费', 'd_stone':'日均矿石消耗',
-        'd_wood':'日均木材消耗', 'd_food':'日均粮食消耗',
-        'log_total_pay':'总付费(对数)', 'wood_bal':'木材平衡比',
-        'food_bal':'粮食平衡比', 'daily_ar':'日均活跃度',
-        'level_v':'等级增长速度',
+        'days_logged_d3':'前3天登录天数', 'level_d3':'前3天等级',
+        'level_change_d3':'前3天等级变化', 'avg_duration_d3':'前3天日均在线',
+        'food_reduce_d3':'前3天粮食消耗', 'wood_reduce_d3':'前3天木材消耗',
+        'stone_reduce_d3':'前3天矿石消耗', 'diamond_reduce_d3':'前3天钻石消耗',
+        'coins_reduce_d3':'前3天金币消耗', 'diamond_d3':'前3天钻石存量',
+        'gold_d3':'前3天金币存量', 'is_pay_d3':'前3天是否付费',
+        'is_league_d3':'前3天是否入盟', 'n_event_types_d3':'前3天事件类型数',
     }
     short_names_en = {
-        'n_event_types':'Event Types', 'log_duration_times':'Playtime(log)',
-        'log_diamond_median':'Diamond(log)', 'is_in_league':'In League',
-        'd_diamond':'Diamond Use/day', 'vip_level_max':'VIP Level',
-        'stone_bal':'Stone Balance', 'd_coins':'Coins Use/day',
-        'is_paying':'Is Paying', 'd_stone':'Stone Use/day',
-        'd_wood':'Wood Use/day', 'd_food':'Food Use/day',
-        'log_total_pay':'Total Pay(log)', 'wood_bal':'Wood Balance',
-        'food_bal':'Food Balance', 'daily_ar':'Activity Rate',
-        'level_v':'Level Velocity',
+        'days_logged_d3':'Days Logged(D3)', 'level_d3':'Level(D3)',
+        'level_change_d3':'Level Change(D3)', 'avg_duration_d3':'Avg Duration(D3)',
+        'food_reduce_d3':'Food Used(D3)', 'wood_reduce_d3':'Wood Used(D3)',
+        'stone_reduce_d3':'Stone Used(D3)', 'diamond_reduce_d3':'Diamond Used(D3)',
+        'coins_reduce_d3':'Coins Used(D3)', 'diamond_d3':'Diamond Stock(D3)',
+        'gold_d3':'Gold Stock(D3)', 'is_pay_d3':'Paid(D3)',
+        'is_league_d3':'In League(D3)', 'n_event_types_d3':'Event Types(D3)',
     }
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         sn = short_names_cn if lang == 'cn' else short_names_en
-        title = '各特征对流失风险的影响' if lang == 'cn' else 'Feature Impact on Churn Risk'
+        title = 'Cox模型：Day3特征对流失风险的影响' if lang == 'cn' else 'Cox: Day3 Feature Impact on Churn Risk'
         xlabel = '回归系数' if lang == 'cn' else 'Coefficient'
         display_idx = [sn.get(x, x) for x in coef_df.index]
 
@@ -614,23 +610,17 @@ def fig12_cox_pred(df):
     from sklearn.metrics import mean_absolute_error
     from lifelines.utils import concordance_index
 
-    df2 = df.copy()
-    df2['daily_ar'] = df2['total_records'] / df2['lifecycle_days'].clip(lower=1)
-    df2['level_v'] = df2['level_growth_rate']
-    for r in ['food','wood','stone','diamond','coins']:
-        df2[f'd_{r}'] = df2[f'{r}_reduce'] / df2['lifecycle_days'].clip(lower=1)
-    for r in ['food','wood','stone']:
-        df2[f'{r}_bal'] = df2[f'{r}_get'] / df2[f'{r}_reduce'].clip(lower=1)
-    for c in ['total_pay','diamond_median','duration_times']:
-        df2[f'log_{c}'] = np.log1p(df2[c])
-    feats = ['daily_ar','level_v','is_paying','is_in_league',
-             'd_food','d_wood','d_stone','d_diamond','d_coins',
-             'food_bal','wood_bal','stone_bal',
-             'log_total_pay','log_diamond_median','log_duration_times',
-             'n_event_types','vip_level_max']
-    clean = df2.dropna(subset=feats+['duration','event_churned'])
-    X = clean[feats]; X = X[~X.isin([np.inf,-np.inf]).any(axis=1)]
-    scl = StandardScaler(); Xs = pd.DataFrame(scl.fit_transform(X), columns=feats, index=X.index)
+    # Use strict Day3 features (consistent with paper sec5)
+    feature_cols = [
+        'days_logged_d3', 'level_d3', 'level_change_d3', 'avg_duration_d3',
+        'food_reduce_d3', 'wood_reduce_d3', 'stone_reduce_d3',
+        'diamond_reduce_d3', 'coins_reduce_d3',
+        'diamond_d3', 'gold_d3',
+        'is_pay_d3', 'is_league_d3', 'n_event_types_d3',
+    ]
+    clean = df.dropna(subset=feature_cols+['duration','event_churned'])
+    X = clean[feature_cols]; X = X[~X.isin([np.inf,-np.inf]).any(axis=1)]
+    scl = StandardScaler(); Xs = pd.DataFrame(scl.fit_transform(X), columns=feature_cols, index=X.index)
     td = pd.concat([Xs, clean.loc[Xs.index, ['duration','event_churned']]], axis=1)
     cph = CoxPHFitter(penalizer=0.1)
     cph.fit(td, duration_col='duration', event_col='event_churned', show_progress=False)
@@ -950,28 +940,41 @@ def fig15_mc_convergence(df):
 def main():
     print('Nature-Style Figure Generation')
     print('=' * 60)
-    df = load_data()
-    print(f'Data: {len(df)} players')
+    df_full, df_d3 = load_data()
+    print(f'Data: full={len(df_full)} players, day3={len(df_d3)} players')
 
-    print('\n1/15  KM curve...');             fig1_km_curve(df)
-    print('2/15  Hazard rate...');            fig2_hazard_rate(df)
-    print('3/15  Segmented retention...');    fig3_segmented_retention(df)
-    print('4/15  Cox coefficients...');       fig4_cox_coefficients(df)
-    print('5/15  Resource-level...');         fig5_resource_level(df)
-    print('6/15  Diamond-churn...');          fig6_diamond_churn(df)
-    print('7/15  Clustering...');             fig7_clustering(df)
-    print('8/15  First pay...');              fig8_first_pay(df)
-    print('9/15  XGBoost importance...');     fig9_xgb_importance(df)
-    print('10/15 Monte Carlo...');            fig10_monte_carlo(df)
-    print('11/15 Active days...');            fig11_active_days(df)
-    print('12/15 Cox pred vs actual...');     fig12_cox_pred(df)
-    print('13/15 XGBoost pred vs actual...'); fig13_xgb_pred(df)
-    print('14/15 Cluster 3D...');             fig14_cluster_3d(df)
-    print('15/15 MC convergence...');         fig15_mc_convergence(df)
+    # Add compatibility column aliases to Day3 table for P1 figure functions
+    df_d3['is_paying'] = df_d3['is_pay_d3']
+    df_d3['is_in_league'] = df_d3['is_league_d3']
+    df_d3['days_active'] = df_d3['days_logged_d3']
+    df_d3['lifecycle_days'] = df_d3['duration']
+    df_d3['level_end'] = df_d3['level_d3']
+    df_d3['level_growth'] = df_d3['level_change_d3']
+    df_d3['level_growth_rate'] = df_d3['level_change_d3'] / df_d3['duration'].clip(lower=1)
 
-    print('\nDone! Generated 15 figures x 2 languages x 3 formats (SVG/PDF/TIFF)')
+    # Problem 1 figures: use Day3-corrected table (df_d3) for correct retention/churn
+    print('\n1/15  KM curve...');             fig1_km_curve(df_d3)
+    print('2/15  Hazard rate...');            fig2_hazard_rate(df_d3)
+    print('3/15  Segmented retention...');    fig3_segmented_retention(df_d3)
+    print('4/15  Cox coefficients...');       fig4_cox_coefficients(df_d3)
+    print('11/15 Active days...');            fig11_active_days(df_d3)
+    print('12/15 Cox pred vs actual...');     fig12_cox_pred(df_d3)
+
+    # Problem 2/3 figures: use full-cycle table (df_full)
+    print('5/15  Resource-level...');         fig5_resource_level(df_full)
+    print('6/15  Diamond-churn...');          fig6_diamond_churn(df_full)
+    print('7/15  Clustering...');             fig7_clustering(df_full)
+    print('8/15  First pay...');              fig8_first_pay(df_full)
+    print('9/15  XGBoost importance...');     fig9_xgb_importance(df_full)
+    print('13/15 XGBoost pred vs actual...'); fig13_xgb_pred(df_full)
+    print('14/15 Cluster 3D...');             fig14_cluster_3d(df_full)
+
+    # Problem 3 MC figures: use hardcoded final results
+    print('10/15 Monte Carlo...');            fig10_monte_carlo(df_full)
+    print('15/15 MC convergence...');         fig15_mc_convergence(df_full)
+
+    print('\nDone! Generated 15 figures x 2 languages x 4 formats (SVG/PDF/TIFF/PNG)')
     print(f'  Output: {FIG_CN} + {FIG_EN}')
-    print(f'  Total: 90 files')
 
 
 if __name__ == '__main__':
