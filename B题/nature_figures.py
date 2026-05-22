@@ -652,23 +652,20 @@ def fig12_cox_pred(df):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.8))
 
-        # ── Left: Hexbin of all predictions ──
-        hb = ax1.hexbin(actual, np.array(pred), gridsize=40, cmap='Blues',
-                        mincnt=1, linewidths=0, alpha=0.9)
-        cbar = fig.colorbar(hb, ax=ax1, shrink=0.78, pad=0.02)
+        # ── Left: Scatter with alpha (better visibility for skewed data) ──
+        ax1.scatter(actual, np.array(pred), alpha=0.15, s=8,
+                    c=PAL["blue"], edgecolors='none')
         mx_log = max(actual.max(), np.max(pred))
         ax1.plot([0, mx_log], [0, mx_log], '--', color=PAL["neutral_dark"],
                 linewidth=0.6, alpha=0.6)
         if lang == 'cn':
             ax1.set_xlabel('实际生存天数')
             ax1.set_ylabel('预测生存天数')
-            ax1.set_title('全量预测（六边形密度图）', fontsize=7, fontweight='bold')
-            cbar.set_label('样本数', fontsize=5.5)
+            ax1.set_title('全量预测（散点图）', fontsize=7, fontweight='bold')
         else:
             ax1.set_xlabel('Actual Survival Days')
             ax1.set_ylabel('Predicted Survival Days')
-            ax1.set_title('All Predictions (hexbin density)', fontsize=7, fontweight='bold')
-            cbar.set_label('Count', fontsize=5.5)
+            ax1.set_title('All Predictions (scatter)', fontsize=7, fontweight='bold')
 
         # ── Right: Scatter by event status ──
         ax2.scatter(actual_cens, pred_cens, alpha=0.5, s=18,
