@@ -10,7 +10,11 @@
 
 \subsubsection{模型建立}
 
-Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。定义``流失''为玩家连续2天无任何记录，流失日期为最后一条记录的日期。KM估计量为：
+Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。定义玩家$i$的流失时刻为：
+\begin{equation}
+T_i = \min\{t \mid \text{玩家}i\text{从第}t\text{天起连续2天无pickdata2行为记录}\}
+\end{equation}
+若玩家在30天内从未触发此条件，则按右删失处理（$T_i = 30$, $\delta_i = 0$）。KM估计量为：
 
 \begin{equation}\label{eq:km}
 \hat{S}(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)

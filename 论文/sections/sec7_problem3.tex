@@ -210,6 +210,32 @@ $P(\text{营收}\geq70,000)$ & 0\% & 0\% & 0\% \\
 \end{tabular}
 \end{table}
 
+优化方案中各礼包的预期贡献见表\ref{tab:pack_contrib}。
+
+\begin{table}[H]
+\centering
+\caption{优化方案各礼包预期贡献（10,000玩家，30天）}
+\label{tab:pack_contrib}
+\begin{tabular}{c|c|c|c|c|c}
+\toprule
+\textbf{礼包} & \textbf{价格(元)} & \textbf{目标人群} & \textbf{预期购买人数} & \textbf{预期收入(元)} & \textbf{ARPU贡献(元)} \\
+\midrule
+免费挽留包 & 0 & Lost Cause(零氪) & $\sim$3,300 & 0 & 0 \\
+首充礼包 & 6 & Persuadable(零氪/中氪) & $\sim$1,200 & $\sim$7,200 & 0.72 \\
+新手补给 & 12 & Persuadable(零氪) & $\sim$450 & $\sim$5,400 & 0.54 \\
+资源补给包 & 30 & 中氪战力党 & $\sim$250 & $\sim$7,500 & 0.75 \\
+成长加速包 & 68 & 中氪战力党 & $\sim$100 & $\sim$6,800 & 0.68 \\
+战力突破包 & 128 & 中氪/高氪 & $\sim$50 & $\sim$6,400 & 0.64 \\
+至尊大礼包 & 328 & 高氪核心党 & $\sim$5 & $\sim$1,640 & 0.16 \\
+传说大礼包 & 648 & 高氪核心党 & $\sim$2 & $\sim$1,296 & 0.13 \\
+\midrule
+\textbf{合计} & & & $\sim$5,300 & $\sim$36,200 & 3.62 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+注：预期购买人数为MC模拟均值取整，实际结果因随机性与有机付费叠加后总收入约25,700元（含有机付费$\sim$5,600+策略付费$\sim$20,100）。表中ARPU为策略付费贡献，不含有机付费部分。
+
 敏感性分析：对优化方案的Persuadable比例进行$\pm20\%$扰动，营收变化区间为22,200$\sim$25,100元（2000次MC粗略估计），均低于基准方案，但留存率在不同参数下保持在9.2\%$\sim$10.0\%区间。
 
 \begin{figure}[H]
