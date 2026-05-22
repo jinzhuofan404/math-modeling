@@ -392,38 +392,34 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
         for c, (cp, n_players) in enumerate(zip(cluster_profiles, cl_sizes)):
             cd = cl_dists[c]
             probs = cluster_probs[c]
-            quad_dist = cluster_quad[c]
             name = cp['name_cn']
+            is_paying = cd['pay_rate'] > 0
             is_whale = (name == '高氪核心党')
 
-            for _ in range(n_players):
-                lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
-                organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
-                strategy_rev, n_pushes, total_price = 0, 0, 0
-                highest_paid = 0
-                total_ret_boost = 0.0
+            if is_paying:
+                # ── Paying cluster: v3 full push + additive uplift (no quadrants) ──
+                # Paid users have proven willingness; pushing only increases spend.
+                # Uplift literature: risk of Sleeping Dog is minimal for payers.
+                for _ in range(n_players):
+                    lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
+                    organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
+                    strategy_rev, n_pushes, total_price = 0, 0, 0
+                    highest_paid = 0
+                    total_ret_boost = 0.0
 
-                # Sample quadrant for this player
-                quad = np.random.choice(4, p=quad_dist)
-
-                # ── Quadrant-specific push logic ──
-                if quad == QUAD_PERSUADABLE:
                     for gp, pp in probs:
                         if n_pushes >= MAX_PUSHES:
                             break
                         if gp['timing'] > lifecycle:
                             continue
                         if gp['price'] <= highest_paid:
-                            continue  # adaptive skip
-
-                        # ── State triggers ──
+                            continue
                         if lifecycle < 3 and gp['price'] > 30:
-                            continue  # short life, skip expensive
+                            continue
                         if is_whale and gp['price'] < 30:
-                            continue  # whale, skip insultingly cheap
+                            continue
                         if highest_paid >= 128 and gp['price'] < 68:
-                            continue  # already bought big, skip cheap
-
+                            continue
                         if np.random.random() < pp:
                             strategy_rev += gp['price']
                             highest_paid = gp['price']
@@ -432,32 +428,53 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
                         total_price += gp['price']
 
                     ret_penalty = lam_pen * n_pushes + mu_pen * total_price / 100
+                    total_revenue += organic_pay + strategy_rev
+                    if np.random.random() < min(0.99, cd['retention_base'] + total_ret_boost - ret_penalty):
+                        retained += 1
 
-                elif quad == QUAD_SURE:
-                    # Sure Thing: no push needed, but buys at conservative rate organically
-                    for gp in paid_packs:
-                        if gp['timing'] > lifecycle:
-                            continue
-                        con_p = cd['pay_rate'] * con_base.get(gp['price'], 0.01)
-                        if np.random.random() < con_p:
-                            strategy_rev += gp['price']
-                            total_ret_boost += gp.get('ret_boost', 0.01)
-                    ret_penalty = 0
+            else:
+                # ── Zero-pay cluster: v4 four-quadrant + free retention pack ──
+                quad_dist = cluster_quad[c]
+                for _ in range(n_players):
+                    lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
+                    organic_pay = 0  # zero-pay, no organic
+                    strategy_rev, n_pushes, total_price = 0, 0, 0
+                    highest_paid = 0
+                    total_ret_boost = 0.0
 
-                elif quad == QUAD_LOST:
-                    # Only free retention pack — investment, not revenue
-                    if free_pack['timing'] <= lifecycle:
-                        n_pushes = 1
-                        total_ret_boost = free_pack['ret_boost']
-                    ret_penalty = 0
+                    quad = np.random.choice(4, p=quad_dist)
 
-                else:
-                    # Sleeping Dog: no push at all, organic only
-                    ret_penalty = 0
+                    if quad == QUAD_PERSUADABLE:
+                        for gp, pp in probs:
+                            if n_pushes >= MAX_PUSHES:
+                                break
+                            if gp['timing'] > lifecycle:
+                                continue
+                            if gp['price'] <= highest_paid:
+                                continue
+                            if lifecycle < 3 and gp['price'] > 30:
+                                continue
+                            if np.random.random() < pp:
+                                strategy_rev += gp['price']
+                                highest_paid = gp['price']
+                                total_ret_boost += gp.get('ret_boost', 0.01)
+                            n_pushes += 1
+                            total_price += gp['price']
+                        ret_penalty = lam_pen * n_pushes + mu_pen * total_price / 100
 
-                total_revenue += organic_pay + strategy_rev
-                if np.random.random() < min(0.99, cd['retention_base'] + total_ret_boost - ret_penalty):
-                    retained += 1
+                    elif quad == QUAD_LOST:
+                        if free_pack['timing'] <= lifecycle:
+                            n_pushes = 1
+                            total_ret_boost = free_pack['ret_boost']
+                        ret_penalty = 0
+
+                    else:
+                        # Sure Thing / Sleeping Dog: no push
+                        ret_penalty = 0
+
+                    total_revenue += organic_pay + strategy_rev
+                    if np.random.random() < min(0.99, cd['retention_base'] + total_ret_boost - ret_penalty):
+                        retained += 1
 
         sim_revenues.append(total_revenue)
         sim_retentions.append(retained / N_SIM_PLAYERS)
