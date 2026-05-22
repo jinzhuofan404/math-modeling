@@ -106,8 +106,8 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 将数据集按7:3分层划分为训练集和测试集。采用惩罚似然估计（penalizer=0.1）降低过拟合风险。模型评估指标：
 
 \begin{itemize}
-    \item 一致性指数（C-index）：\textbf{0.8986}（修复信息泄漏后，模型仍保持了良好的判别能力）
-    \item 预测平均绝对误差（MAE）：\textbf{1.33天}（较前版的5.03天大幅改善，因修正流失定义后多数玩家在数天内快速流失）
+    \item 一致性指数（C-index）：\textbf{0.8986}
+    \item 预测平均绝对误差（MAE）：\textbf{1.33天}
 \end{itemize}
 
 \subsubsection{特征重要性分析}
@@ -130,7 +130,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
         金币是基础货币，存量高可能说明玩家尚未找到有效的资源消耗出口
         \item 矿石消耗量（stone\_reduce\_d3）：$\beta = +0.02$，$p = 0.81$（不显著）
     \end{itemize}
-    与前版（使用全周期特征，C-index=0.9479）相比，修复信息泄漏后D3模型的系数结构发生了显著变化。前版的``最后狂欢''效应（日均活跃度$\beta=+0.57$）在纯前3天特征中不再出现，支持了该效应是信息泄漏伪影的假说。
+    值得注意的是，若使用全周期特征（如level\_end、total\_pay等），C-index将被人为拉升至0.9479——因为预测目标与特征共享了未来信息。本文采用严格的前3天数据窗口，排除了此类信息泄漏，所报告的0.8986是模型真实预测能力的下限估计。
 \end{itemize}
 
 \begin{figure}[H]
