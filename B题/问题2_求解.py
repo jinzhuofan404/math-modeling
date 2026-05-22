@@ -340,7 +340,7 @@ def main():
 
     results = [
         '=== 问题2 结果 ===',
-        f'石头-等级增长相关性最强: r={corr_df[0]["r"]:.3f}',
+        f'资源-等级增长相关系数: ' + ', '.join([f'{c["Resource_CN"]} r={c["r"]:.3f}' for c in corr_df]),
         f'钻石50%流失阈值: {dia_threshold:.0f}',
         f'XGBoost MAE: {metrics["MAE"]:.4f}, R2(付费者): {metrics["R2_payers"]:.4f}',
     ]
