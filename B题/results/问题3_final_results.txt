@@ -1,0 +1,21 @@
+=== Problem 3 Final Run (5000 MC) ===
+Loaded 2000 players
+
+>>> BASELINE <<<
+
+>>> CONSERVATIVE <<<
+
+>>> TARGET <<<
+
+============================================================
+FINAL RESULTS (5000 MC)
+Baseline:     rev=5,605 ret=7.1%
+Conservative: rev=26,270 ret=7.2%
+Target v5:    rev=25,681 ret=10.0%
+Target/Conserv: 0.978x
+P(ret>=10%): 54.8%
+P(rev>=70K): 0.0%
+Conserv 95%CI: [26204, 26335]
+Target 95%CI:  [25630, 25731]
+
+Done. Results saved.
