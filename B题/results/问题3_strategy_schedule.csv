@@ -1,7 +1,9 @@
 ﻿Timing_CN,Timing_EN,Trigger_CN,Trigger_EN,Pack_CN,Pack_EN,Price,Target_Clusters
-Day 1,Day 1,注册首日自动推送,Auto on registration day,首充礼包,First Purchase Pack,6,"F2P Casual, Mid Spender"
-Day 3,Day 3,活跃>=2天且未付费触发,Active>=2d & no payment,新手补给,Novice Supply Pack,12,"F2P Casual, F2P Churner"
-Day 7,Day 7,"活跃>=5天且未付费, 或钻石存量<566触发 (问题2流失阈值)","Active>=5d & no payment, or diamond<566 (P2 churn threshold)",资源补给包,Resource Supply Pack,30,Mid Spender
-Day 3-5,Day 3-5,连续2天资源缺口>30%,2-day resource gap >30%,成长加速包,Growth Accelerator,68,Mid Spender
-Day 7-10,Day 7-10,等级停滞(>=3天未升级),Level stagnation >=3 days,战力突破包,Power Breakthrough,128,"Mid Spender, Whale"
-Day 1-7,Day 1-7,注册首周且等级>=5触发,Day 1-7 & level >= 5,至尊大礼包,Ultimate Pack,328,Whale
+Day 1-30,Day 1-30,Lost Cause象限 (高流失风险零氪),Lost Cause quadrant (high-churn F2P),免费挽留包,Free Retention Pack,0,F2P Churner
+Day 1,Day 1,注册首日自动推送 (Persuadable仅),Auto Day1 (Persuadable only),首充礼包,First Purchase Pack,6,"F2P Casual, Mid Spender"
+Day 3,Day 3,活跃>=2天且未付费 (Persuadable仅),Active>=2d & no payment (Persuadable only),新手补给,Novice Supply Pack,12,"F2P Casual, F2P Churner"
+Day 7,Day 7,"活跃>=5天或钻石<566 (Persuadable仅, 问题2阈值)","Active>=5d or diamond<566 (Persuadable, P2 threshold)",资源补给包,Resource Supply Pack,30,Mid Spender
+Day 3-5,Day 3-5,连续2天资源缺口>30% (Persuadable仅),2-day resource gap >30% (Persuadable only),成长加速包,Growth Accelerator,68,Mid Spender
+Day 7-10,Day 7-10,等级停滞>=3天 (Persuadable仅),Level stagnation >=3d (Persuadable only),战力突破包,Power Breakthrough,128,"Mid Spender, Whale"
+Day 21,Day 21,等级>=10且已购过≥68元包 (Persuadable仅),Level>=10 & bought >=68¥ pack (Persuadable),至尊大礼包,Ultimate Pack,328,Whale
+Day 28,Day 28,已购过328元包 (Persuadable高氪仅),Bought 328¥ pack (Persuadable Whale only),传说大礼包,Legendary Pack,648,Whale

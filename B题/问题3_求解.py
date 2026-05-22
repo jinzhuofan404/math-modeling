@@ -47,8 +47,24 @@ def set_font(lang):
 
 
 def load_features():
+    """Load player features + activity intensity per active day."""
     path = os.path.join(DATA_DIR, 'player_features.csv')
-    return pd.read_csv(path)
+    df = pd.read_csv(path)
+
+    # Load pick_stat files for activity intensity (used in MC, not clustering)
+    stat1_path = os.path.join(BASE_DIR, '..', '题目', 'B题：附件 数据集', 'pick_stat1.csv')
+    stat2_path = os.path.join(BASE_DIR, '..', '题目', 'B题：附件 数据集', 'pick_stat2.csv')
+    if os.path.exists(stat1_path):
+        s1 = pd.read_csv(stat1_path)
+        df['stat1_count'] = s1['count'].values
+    if os.path.exists(stat2_path):
+        s2 = pd.read_csv(stat2_path)
+        df['stat2_count'] = s2['count'].values
+
+    # Per-active-day intensity
+    df['events_per_day'] = df['stat2_count'] / df['days_active'].clip(lower=1)
+    df['resources_per_day'] = df['stat1_count'] / df['days_active'].clip(lower=1)
+    return df
 
 
 def player_clustering(df):
@@ -57,6 +73,9 @@ def player_clustering(df):
     print('3.1 Player Clustering')
     print('=' * 50)
 
+    # Note: stat intensity features (events_per_day, resources_per_day) excluded
+    # from clustering because they collapse K to 2, masking payment/league dimensions.
+    # They are used in the MC simulation's per-cluster targeting logic instead.
     cluster_feats = [
         'days_active', 'lifecycle_days', 'level_end', 'level_growth_rate',
         'is_paying', 'total_pay', 'is_in_league', 'vip_level_max',
@@ -236,6 +255,7 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
         {'price': 68, 'prob_mult': 0.15, 'ret_boost': 0.04},
         {'price': 128, 'prob_mult': 0.05, 'ret_boost': 0.05},
         {'price': 328, 'prob_mult': 0.01, 'ret_boost': 0.06},
+        {'price': 648, 'prob_mult': 0.003, 'ret_boost': 0.07},
     ]
 
     sim_revenues, sim_retentions = [], []
@@ -270,80 +290,100 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
             'revenues': revenues, 'retentions': retentions, 'label': 'Conservative'}
 
 
-def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists):
-    """Target scheme: intervention elasticity + greedy sequential push."""
+def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists,
+                       quadrant_config=None, sens_label='基准'):
+    """v4 Target scheme: four-quadrant uplift + free retention pack + state triggers.
+
+    Quadrants: Persuadable (push), Sure Thing (organic only),
+               Sleeping Dog (suppress), Lost Cause (free retention pack only).
+
+    State triggers: lifecycle<3 skip >30¥, whale skip <30¥, post-big-buy skip <68¥.
+    Joint decision: each purchase adds ret_boost incrementally.
+    """
     print('\n' + '=' * 50)
-    print('3.5 Target Scheme MC (Intervention Elasticity)')
+    print(f'3.5 Target Scheme MC v4 [{sens_label}]')
     print('=' * 50)
 
     np.random.seed(RANDOM_SEED)
 
-    # ── Intervention elasticity multipliers per cluster ──
-    # λ_c: how much more likely cluster c is to purchase when actively pushed
-    # vs. their organic pay rate. Based on: (1) intra-cluster pay willingness,
-    # (2) SLG industry first-purchase conversion benchmarks (10-20%).
-    # Cluster names from data/cluster_name_map.csv (K-Means, random_state=42)
-    lambda_c = {
-        0: 0.15,  # 零氪休闲党: active but never paid → 15% first-purchase conversion
-        1: 0.05,  # 零氪流失党: fast churn, reachable only Day1 → 5% baseline
-        2: 0.05,  # 零氪流失党: same
-        3: 1.20,  # 中氪战力党: 35.5% pay rate → 20% uplift on organic
-        4: 1.50,  # 高氪核心党: proven willingness → 50% uplift (scarcity/limited packs)
-        5: 1.30,  # 中氪战力党: 100% pay rate → 30% uplift
+    # ── Quadrant proportions per cluster (default baseline) ──
+    if quadrant_config is None:
+        quadrant_config = {
+            # name: [Persuadable%, SureThing%, SleepingDog%, LostCause%]
+            "高氪核心党": [0.40, 0.60, 0.00, 0.00],
+            "中氪战力党": [0.50, 0.40, 0.10, 0.00],
+            "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
+            "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+        }
+
+    # ── Intervention parameters by cluster NAME ──
+    lambda_by_name = {  # zero-pay: first-purchase conversion baseline
+        "零氪休闲党": 0.15,
+        "零氪流失党": 0.05,
+    }
+    delta_by_name = {   # paying: uplift multiplier on conservative base
+        "中氪战力党": 0.30,
+        "高氪核心党": 0.50,
     }
 
+    # Conservative base probabilities per pack
+    con_base = {6: 1.0, 12: 0.5, 30: 0.4, 68: 0.15, 128: 0.05, 328: 0.01, 648: 0.003}
+
     # ── Gift packs ──
-    gift_packs = [
-        {'name_cn': '首充礼包', 'price': 6,  'timing': 1},
-        {'name_cn': '新手补给', 'price': 12, 'timing': 3},
-        {'name_cn': '资源补给包', 'price': 30, 'timing': 7},
-        {'name_cn': '成长加速包', 'price': 68, 'timing': 10},
-        {'name_cn': '战力突破包', 'price': 128,'timing': 14},
-        {'name_cn': '至尊大礼包', 'price': 328,'timing': 21},
+    # Free retention pack (price=0, for Lost Cause)
+    free_pack = {'name_cn': '免费挽留包', 'price': 0, 'timing': 1, 'ret_boost': 0.05}
+    # Paid packs (price ascending for adaptive logic)
+    paid_packs = [
+        {'name_cn': '首充礼包',   'price': 6,   'timing': 1,  'ret_boost': 0.02},
+        {'name_cn': '新手补给',   'price': 12,  'timing': 3,  'ret_boost': 0.02},
+        {'name_cn': '资源补给包', 'price': 30,  'timing': 7,  'ret_boost': 0.03},
+        {'name_cn': '成长加速包', 'price': 68,  'timing': 10, 'ret_boost': 0.04},
+        {'name_cn': '战力突破包', 'price': 128, 'timing': 14, 'ret_boost': 0.05},
+        {'name_cn': '至尊大礼包', 'price': 328, 'timing': 21, 'ret_boost': 0.06},
+        {'name_cn': '传说大礼包', 'price': 648, 'timing': 28, 'ret_boost': 0.07},
     ]
 
-    # ── Compute P_push per cluster×pack with conversion floor ──
-    # Zero-pay clusters get a minimum first-purchase conversion probability
-    # (the "barrier-breaking" effect of a well-timed push)
+    # ── Precompute per-cluster, per-pack purchase probabilities (for Persuadable) ──
+    cluster_probs = {}
     for c, cp in enumerate(cluster_profiles):
-        lam = lambda_c.get(c, 0.05)
-        er_list = []
-        for gp in gift_packs:
-            if cp['pay_rate'] > 0:
-                # Paying clusters: organic rate + intervention uplift
-                p_push = lam * cp['pay_rate']/100.0 * np.exp(-beta_hat * gp['price'])
-                p_push = max(p_push, 0.01)
-            else:
-                # Zero-pay clusters: baseline first-purchase conversion × price decay
-                # λ_c already encodes the push-conversion baseline (0.05-0.15)
-                p_push = lam * np.exp(-beta_hat * gp['price'])
-                p_push = max(p_push, 0.001)
-            er = gp['price'] * p_push
-            er_list.append((er, gp, p_push))
-        er_list.sort(key=lambda x: x[0], reverse=True)
-        top3 = er_list[:3]
-        print(f'  {cp["name_cn"]}: top3 packs = ' +
-              ', '.join([f'{gp["price"]}yuan(P={pp:.3f},ER={er:.1f})' for er, gp, pp in top3]))
+        name = cp['name_cn']
+        lam = lambda_by_name.get(name, 0.05)
+        delta = delta_by_name.get(name, 0.0)
+        base_pay_prob = cp['pay_rate'] / 100.0
 
-    # ── Precompute ranked pack lists per cluster (loop-invariant) ──
-    cluster_ranked = {}
-    for c, cp in enumerate(cluster_profiles):
-        lam = lambda_c.get(c, 0.05)
-        ranked = []
-        for gp in gift_packs:
-            if cp['pay_rate'] > 0:
-                pp = lam * cp['pay_rate']/100.0 * np.exp(-beta_hat * gp['price'])
-                pp = max(pp, 0.01)
+        probs = []
+        for gp in paid_packs:
+            price = gp['price']
+            if base_pay_prob > 0:
+                # Paying cluster: conservative base + additive uplift
+                con_p = base_pay_prob * con_base.get(price, 0.01)
+                p_push = min(0.99, con_p * (1.0 + delta))
             else:
-                pp = lam * np.exp(-beta_hat * gp['price'])
-                pp = max(pp, 0.001)
-            ranked.append((gp, pp))
-        ranked.sort(key=lambda x: x[1] * x[0]['price'], reverse=True)
-        cluster_ranked[c] = ranked
+                # Zero-pay cluster: demand curve creation
+                p_push = lam * np.exp(-beta_hat * price)
+                p_push = max(p_push, 0.001)
+            probs.append((gp, p_push))
+        probs.sort(key=lambda x: x[0]['price'])
+        cluster_probs[c] = probs
+
+        top3 = sorted(probs, key=lambda x: x[0]['price'] * x[1], reverse=True)[:3]
+        print(f'  {name}: top3 = ' +
+              ', '.join([f'{gp["price"]}yuan(P={pp:.3f},ER={gp["price"]*pp:.1f})' for gp, pp in top3]))
+
+    # ── Quadrant name → index mapping ──
+    QUAD_PERSUADABLE, QUAD_SURE, QUAD_SLEEPING, QUAD_LOST = 0, 1, 2, 3
+    quad_names = ['Persuadable', 'SureThing', 'SleepingDog', 'LostCause']
+
+    # Build per-cluster quadrant distribution
+    cluster_quad = {}
+    for c, cp in enumerate(cluster_profiles):
+        qcfg = quadrant_config.get(cp['name_cn'], [0.25, 0.25, 0.25, 0.25])
+        total = sum(qcfg)
+        cluster_quad[c] = [v / total for v in qcfg]
 
     # ── MC Simulation ──
     sim_revenues, sim_retentions = [], []
-    MAX_PUSHES, lam_pen, mu_pen = 8, 0.003, 0.001
+    MAX_PUSHES, lam_pen, mu_pen = 10, 0.003, 0.001
 
     for sim_idx in range(N_MC_SIMS):
         if sim_idx % 1000 == 0 and sim_idx > 0:
@@ -351,26 +391,74 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
         total_revenue, retained = 0, 0
         for c, (cp, n_players) in enumerate(zip(cluster_profiles, cl_sizes)):
             cd = cl_dists[c]
-            ranked = cluster_ranked[c]
+            probs = cluster_probs[c]
+            quad_dist = cluster_quad[c]
+            name = cp['name_cn']
+            is_whale = (name == '高氪核心党')
 
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
                 organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
                 strategy_rev, n_pushes, total_price = 0, 0, 0
-                for gp, pp in ranked:
-                    if n_pushes >= MAX_PUSHES:
-                        break
-                    if gp['timing'] > lifecycle:
-                        continue
-                    if np.random.random() < pp:
-                        strategy_rev += gp['price']
-                    n_pushes += 1
-                    total_price += gp['price']
-                ret_penalty = lam_pen * n_pushes + mu_pen * total_price / 100
-                ret_boost = min(0.04, 0.008 * n_pushes)
+                highest_paid = 0
+                total_ret_boost = 0.0
+
+                # Sample quadrant for this player
+                quad = np.random.choice(4, p=quad_dist)
+
+                # ── Quadrant-specific push logic ──
+                if quad == QUAD_PERSUADABLE:
+                    for gp, pp in probs:
+                        if n_pushes >= MAX_PUSHES:
+                            break
+                        if gp['timing'] > lifecycle:
+                            continue
+                        if gp['price'] <= highest_paid:
+                            continue  # adaptive skip
+
+                        # ── State triggers ──
+                        if lifecycle < 3 and gp['price'] > 30:
+                            continue  # short life, skip expensive
+                        if is_whale and gp['price'] < 30:
+                            continue  # whale, skip insultingly cheap
+                        if highest_paid >= 128 and gp['price'] < 68:
+                            continue  # already bought big, skip cheap
+
+                        if np.random.random() < pp:
+                            strategy_rev += gp['price']
+                            highest_paid = gp['price']
+                            total_ret_boost += gp.get('ret_boost', 0.01)
+                        n_pushes += 1
+                        total_price += gp['price']
+
+                    ret_penalty = lam_pen * n_pushes + mu_pen * total_price / 100
+
+                elif quad == QUAD_SURE:
+                    # Sure Thing: no push needed, but buys at conservative rate organically
+                    for gp in paid_packs:
+                        if gp['timing'] > lifecycle:
+                            continue
+                        con_p = cd['pay_rate'] * con_base.get(gp['price'], 0.01)
+                        if np.random.random() < con_p:
+                            strategy_rev += gp['price']
+                            total_ret_boost += gp.get('ret_boost', 0.01)
+                    ret_penalty = 0
+
+                elif quad == QUAD_LOST:
+                    # Only free retention pack — investment, not revenue
+                    if free_pack['timing'] <= lifecycle:
+                        n_pushes = 1
+                        total_ret_boost = free_pack['ret_boost']
+                    ret_penalty = 0
+
+                else:
+                    # Sleeping Dog: no push at all, organic only
+                    ret_penalty = 0
+
                 total_revenue += organic_pay + strategy_rev
-                if np.random.random() < min(0.99, cd['retention_base'] + ret_boost - ret_penalty):
+                if np.random.random() < min(0.99, cd['retention_base'] + total_ret_boost - ret_penalty):
                     retained += 1
+
         sim_revenues.append(total_revenue)
         sim_retentions.append(retained / N_SIM_PLAYERS)
 
@@ -383,7 +471,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
     print(f'  Mean retention: {mean_ret*100:.1f}%, P(>=10%): {prob_ret*100:.1f}%')
     return {'mean_revenue': mean_rev, 'std_revenue': std_rev, 'prob_revenue': prob_rev,
             'mean_retention': mean_ret, 'prob_retention': prob_ret,
-            'revenues': revs, 'retentions': rets, 'label': 'Target'}
+            'revenues': revs, 'retentions': rets, 'label': f'Target v4 [{sens_label}]'}
 
 
 def build_mc_state(cluster_profiles, df):
@@ -440,29 +528,37 @@ def generate_strategy_schedule(cluster_profiles):
 
     # ── Trigger conditions integrate Problem 1 (churn risk) & Problem 2 (diamond threshold 566) ──
     gift_packs = [
+        {'name_cn': '免费挽留包', 'name_en': 'Free Retention Pack', 'price': 0,
+         'timing_cn': 'Day 1-30', 'timing_en': 'Day 1-30',
+         'trigger_cn': 'Lost Cause象限 (高流失风险零氪)', 'trigger_en': 'Lost Cause quadrant (high-churn F2P)',
+         'targets': ['F2P Churner']},
         {'name_cn': '首充礼包', 'name_en': 'First Purchase Pack', 'price': 6,
          'timing_cn': 'Day 1', 'timing_en': 'Day 1',
-         'trigger_cn': '注册首日自动推送', 'trigger_en': 'Auto on registration day',
+         'trigger_cn': '注册首日自动推送 (Persuadable仅)', 'trigger_en': 'Auto Day1 (Persuadable only)',
          'targets': ['F2P Casual', 'Mid Spender']},
         {'name_cn': '新手补给', 'name_en': 'Novice Supply Pack', 'price': 12,
          'timing_cn': 'Day 3', 'timing_en': 'Day 3',
-         'trigger_cn': '活跃>=2天且未付费触发', 'trigger_en': 'Active>=2d & no payment',
+         'trigger_cn': '活跃>=2天且未付费 (Persuadable仅)', 'trigger_en': 'Active>=2d & no payment (Persuadable only)',
          'targets': ['F2P Casual', 'F2P Churner']},
         {'name_cn': '资源补给包', 'name_en': 'Resource Supply Pack', 'price': 30,
          'timing_cn': 'Day 7', 'timing_en': 'Day 7',
-         'trigger_cn': '活跃>=5天且未付费, 或钻石存量<566触发 (问题2流失阈值)', 'trigger_en': 'Active>=5d & no payment, or diamond<566 (P2 churn threshold)',
+         'trigger_cn': '活跃>=5天或钻石<566 (Persuadable仅, 问题2阈值)', 'trigger_en': 'Active>=5d or diamond<566 (Persuadable, P2 threshold)',
          'targets': ['Mid Spender']},
         {'name_cn': '成长加速包', 'name_en': 'Growth Accelerator', 'price': 68,
          'timing_cn': 'Day 3-5', 'timing_en': 'Day 3-5',
-         'trigger_cn': '连续2天资源缺口>30%', 'trigger_en': '2-day resource gap >30%',
+         'trigger_cn': '连续2天资源缺口>30% (Persuadable仅)', 'trigger_en': '2-day resource gap >30% (Persuadable only)',
          'targets': ['Mid Spender']},
         {'name_cn': '战力突破包', 'name_en': 'Power Breakthrough', 'price': 128,
          'timing_cn': 'Day 7-10', 'timing_en': 'Day 7-10',
-         'trigger_cn': '等级停滞(>=3天未升级)', 'trigger_en': 'Level stagnation >=3 days',
+         'trigger_cn': '等级停滞>=3天 (Persuadable仅)', 'trigger_en': 'Level stagnation >=3d (Persuadable only)',
          'targets': ['Mid Spender', 'Whale']},
         {'name_cn': '至尊大礼包', 'name_en': 'Ultimate Pack', 'price': 328,
-         'timing_cn': 'Day 1-7', 'timing_en': 'Day 1-7',
-         'trigger_cn': '注册首周且等级>=5触发', 'trigger_en': 'Day 1-7 & level >= 5',
+         'timing_cn': 'Day 21', 'timing_en': 'Day 21',
+         'trigger_cn': '等级>=10且已购过≥68元包 (Persuadable仅)', 'trigger_en': 'Level>=10 & bought >=68¥ pack (Persuadable)',
+         'targets': ['Whale']},
+        {'name_cn': '传说大礼包', 'name_en': 'Legendary Pack', 'price': 648,
+         'timing_cn': 'Day 28', 'timing_en': 'Day 28',
+         'trigger_cn': '已购过328元包 (Persuadable高氪仅)', 'trigger_en': 'Bought 328¥ pack (Persuadable Whale only)',
          'targets': ['Whale']},
     ]
 
@@ -502,27 +598,60 @@ def main():
     # Three MC simulations
     mc_baseline = monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists)
     mc_conservative = monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists)
-    mc_target = monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists)
+
+    # Target scheme: baseline + 2 sensitivity variants
+    mc_target_base = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+                                        cl_sizes, cl_dists, sens_label='基准')
+
+    # Sensitivity A: Persuadable比例 -20% (pessimistic)
+    quad_pessimistic = {k: [v[0]*0.8, v[1]+v[0]*0.2, v[2], v[3]] for k, v in {
+        "高氪核心党": [0.40, 0.60, 0.00, 0.00],
+        "中氪战力党": [0.50, 0.40, 0.10, 0.00],
+        "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
+        "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+    }.items()}
+    mc_target_pes = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+                                       cl_sizes, cl_dists,
+                                       quadrant_config=quad_pessimistic,
+                                       sens_label='悲观')
+
+    # Sensitivity B: Persuadable比例 +20% (optimistic)
+    quad_optimistic = {k: [min(1.0, v[0]*1.2), max(0, v[1]-v[0]*0.2), v[2], v[3]] for k, v in {
+        "高氪核心党": [0.40, 0.60, 0.00, 0.00],
+        "中氪战力党": [0.50, 0.40, 0.10, 0.00],
+        "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
+        "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+    }.items()}
+    mc_target_opt = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+                                       cl_sizes, cl_dists,
+                                       quadrant_config=quad_optimistic,
+                                       sens_label='乐观')
 
     sched_df = generate_strategy_schedule(cluster_profiles)
 
     results = [
-        '=== 问题3 结果 ===',
+        '=== 问题3 v4 结果 ===',
         f'最优聚类数: {len(cluster_profiles)}',
         '',
-        '--- 无干预基线 ---',
+        '--- 无干预基线（自然有机付费） ---',
         f'期望营收: {mc_baseline["mean_revenue"]:.0f} CNY',
         f'期望留存率: {mc_baseline["mean_retention"]*100:.1f}%',
         '',
-        '--- 保守方案 ---',
+        '--- 主方案：历史分布增强方案 ---',
         f'期望营收: {mc_conservative["mean_revenue"]:.0f} CNY',
         f'P(营收>=70000): {mc_conservative["prob_revenue"]*100:.1f}%',
         f'期望留存率: {mc_conservative["mean_retention"]*100:.1f}%',
         '',
-        '--- 目标方案(贪心序列推送) ---',
-        f'期望营收: {mc_target["mean_revenue"]:.0f} CNY',
-        f'P(营收>=70000): {mc_target["prob_revenue"]*100:.1f}%',
-        f'期望留存率: {mc_target["mean_retention"]*100:.1f}%',
+        '--- 探索方案v4：四象限+增量叠加+免费挽留+状态触发 ---',
+        f'[基准] 期望营收: {mc_target_base["mean_revenue"]:.0f} CNY, 留存: {mc_target_base["mean_retention"]*100:.1f}%',
+        f'[悲观] 期望营收: {mc_target_pes["mean_revenue"]:.0f} CNY, 留存: {mc_target_pes["mean_retention"]*100:.1f}%',
+        f'[乐观] 期望营收: {mc_target_opt["mean_revenue"]:.0f} CNY, 留存: {mc_target_opt["mean_retention"]*100:.1f}%',
+        f'[基准] P(>=70K): {mc_target_base["prob_revenue"]*100:.1f}%',
+        '',
+        '--- 对比 ---',
+        f'主方案 vs 基线: {mc_conservative["mean_revenue"]/max(1,mc_baseline["mean_revenue"]):.1f}x',
+        f'探索方案(基准) vs 主方案: {mc_target_base["mean_revenue"]/max(1,mc_conservative["mean_revenue"]):.1f}x',
+        f'探索方案(乐观) vs 主方案: {mc_target_opt["mean_revenue"]/max(1,mc_conservative["mean_revenue"]):.1f}x',
     ]
     with open(os.path.join(RES_DIR, '问题3_results.txt'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(results))
