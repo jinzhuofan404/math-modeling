@@ -1,0 +1,102 @@
+我重新看了 GitHub main 分支。当前 B 题论文**比最早版本进步明显**，尤其是问题1已经基本修掉了“前3天预测信息泄漏”的大坑；但是现在最大问题变成了：**代码/结果已经更新，论文正文没有完全同步，导致当前论文内部有多处数值冲突。**
+
+我对当前版本的判断是：**还不是可提交状态，大概 75～80 分水平；同步修完后可以到 82～86 分。**
+
+## 目前做得好的地方
+
+问题1有明显进步。当前 `问题1_results.txt` 已经给出修正后的结果：次日留存 33.55%、7日留存 6.30%、14日留存 2.65%、30日留存 0.85%，Cox 模型 C-index=0.8986，MAE=1.33 天。这个比之前 C-index=0.9479 的版本更可信。([GitHub][1])
+
+问题3也已经不再只给一个保守方案，当前结果文件里已经有三组：无干预基线 5605 元、保守方案 22424 元、目标方案 20297 元，并且都明确给出 (P(\text{营收}\ge70000)=0%)。这说明你们已经开始诚实面对“7万元目标不可达”的数据现实。([GitHub][2])
+
+聚类映射表也已经生成，目前有零氪休闲党、零氪流失党、中氪战力党、高氪核心党等类别，说明你们已经尝试把代码聚类和论文命名统一。([GitHub][3])
+
+## 现在最严重的问题
+
+### 1. 摘要还是旧版本，必须立刻改
+
+摘要里仍然写：次日留存率 42.35%、30日留存率 7.58%、Cox C-index=0.9479、MAE=5.03 天。([GitHub][4])
+但当前结果文件已经变成：次日 33.55%、30日 0.85%、C-index=0.8986、MAE=1.33 天。([GitHub][1])
+
+这个是**硬伤**。评委如果只看摘要和正文/结果不一致，会直接怀疑你们论文没有整体重跑。
+
+### 2. 问题1正文局部更新了，但仍有残留旧数字
+
+问题1正文前半部分已经写了前3天特征约束，也写了新的留存率和 Cox 结果，这是好事。([GitHub][5])
+但最后预测散点图标题仍写“C-index=0.95, MAE=5.03天”，这是旧版本数字。([GitHub][5])
+
+此外，正文中流失定义还写成“连续2天无任何记录，流失日期为最后一条记录日期”，而你们之前修订方案要求的是“连续2天无 pickdata2 记录”。这两个表述不完全一致，建议统一成：
+
+[
+T_i=\min{t:\text{玩家从第}t\text{天起连续2天无pickdata2记录}}
+]
+
+### 3. 问题2数值冲突仍然存在
+
+当前 `问题2_results.txt` 写的是：石头-等级增长相关性最强 (r=0.394)，钻石阈值 566，XGBoost 付费者 (R^2=-0.6144)。([GitHub][6])
+但论文问题2正文写的是矿石相关性最强 (r=0.504)。([GitHub][7])
+
+这必须统一。更重要的是，XGBoost 的 (R^2=-0.6144) 说明模型预测付费金额效果很差，论文不能继续把它包装成“有效预测模型”。应该改成：
+
+> XGBoost 主要用于特征重要性解释，不用于精确预测付费金额。
+
+另外，`sec6_problem2.tex` 末尾看起来有异常残留字符 `\end｜｜DSML｜｜parameter>`，这个可能会影响 LaTeX 编译，必须检查。([GitHub][7])
+
+### 4. 问题3正文还没有同步到最新三方案
+
+当前结果文件已经是三方案：基线、保守、目标。([GitHub][2])
+但论文 `sec7_problem3.tex` 仍然主要写旧版单方案蒙特卡洛，只展示 22,424 元、留存 11.92%、(P(\text{营收}\ge70000)=0%)。([GitHub][8])
+
+这会让论文逻辑落后于代码。建议把问题3重写成：
+
+1. 无干预基线：5605 元，留存 7.1%；
+2. 保守方案：22424 元，留存 11.9%，作为主方案；
+3. 目标/探索方案：20297 元，留存 12.7%，但营收低于保守方案，因此只能作为“假设性探索”，不能叫真正的优化成功方案。
+
+### 5. 聚类命名和策略表仍有不一致
+
+`cluster_name_map.csv` 里现在没有 “Light Spender / 微氪月卡党” 这一类，C3 被命名为“中氪战力党”。([GitHub][3])
+但策略表 `问题3_strategy_schedule.csv` 仍然把目标人群写成 “Light Spender, Mid Spender”。([GitHub][9])
+
+也就是说：**策略表里引用了一个当前聚类映射表中不存在的类别。** 这个必须修正，否则评委会认为聚类和策略没有真正打通。
+
+### 6. 第三问仍没有完全回应题目要求
+
+题目要求第三问明确给出推送时间、触发条件、面向人群、礼包内容组合、建议价格、预期单项贡献和总收入，并证明 70,000 元目标达成概率。
+
+你们现在有推送时机、触发条件、价格和人群，但**缺少每个礼包的预期购买人数、单项收入贡献、ARPU贡献**。建议在问题3加一张表：
+
+| 礼包 | 目标人群 | 价格 | 预期触达人群 | 购买概率 | 预期收入 | ARPU贡献 |
+| -- | ---- | -: | -----: | ---: | ---: | -----: |
+
+这样第三问才算完整回应题目。
+
+## 当前论文最应该怎么改
+
+优先级如下：
+
+1. **先全局同步数字**：摘要、问题1、问题2、问题3、问题4所有旧数字全部替换成当前 results 文件里的数字。
+2. **修问题2**：统一 (r=0.394) 还是 (r=0.504)，并明确 XGBoost 的 (R^2=-0.6144) 意味着预测效果不好。
+3. **重写问题3**：改成“基线—保守主方案—目标探索方案”三段式，不要再把目标方案写成成功优化。
+4. **修聚类和策略表映射**：策略表中不能出现 `cluster_name_map.csv` 里不存在的人群。
+5. **补问题3单项贡献表**：这是题目明确要求的内容。
+6. **修问题4旧引用**：问题4还在引用旧的联盟留存数字，比如加联盟 61.6% vs 未加联盟 13.4%，但问题1正文当前写的是前3天入盟 28.0% vs 1.2%。([GitHub][10])
+
+## 最终评价
+
+你们现在的 B 题已经从“模型看起来高级但问题3目标没闭环”，进化成了“愿意承认数据天花板、结果更诚实”的版本。这个方向是对的。
+
+但当前论文还处于**半同步状态**：
+**问题1代码和部分正文是新版，摘要是旧版；问题3结果是新版，正文还是旧版；问题2结果和正文数值冲突；策略表和聚类映射不一致。**
+
+所以现在不要再加新模型了，先做一次“论文-代码-results 全链路一致性修复”。修完后，这篇论文的可信度会明显提升。
+
+[1]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/B%E9%A2%98/results/%E9%97%AE%E9%A2%981_results.txt "raw.githubusercontent.com"
+[2]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/B%E9%A2%98/results/%E9%97%AE%E9%A2%983_results.txt "raw.githubusercontent.com"
+[3]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/B%E9%A2%98/data/cluster_name_map.csv "raw.githubusercontent.com"
+[4]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/%E8%AE%BA%E6%96%87/sections/sec1_abstract.tex "raw.githubusercontent.com"
+[5]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/%E8%AE%BA%E6%96%87/sections/sec5_problem1.tex "raw.githubusercontent.com"
+[6]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/B%E9%A2%98/results/%E9%97%AE%E9%A2%982_results.txt "raw.githubusercontent.com"
+[7]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/%E8%AE%BA%E6%96%87/sections/sec6_problem2.tex "raw.githubusercontent.com"
+[8]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/%E8%AE%BA%E6%96%87/sections/sec7_problem3.tex "raw.githubusercontent.com"
+[9]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/B%E9%A2%98/results/%E9%97%AE%E9%A2%983_strategy_schedule.csv "raw.githubusercontent.com"
+[10]: https://raw.githubusercontent.com/JunQianNuo/math-modeling/main/%E8%AE%BA%E6%96%87/sections/sec8_problem4.tex "raw.githubusercontent.com"
