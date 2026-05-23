@@ -242,6 +242,65 @@ def cox_prediction_model(df):
     cph.fit(train_data, duration_col='duration', event_col='event_churned', show_progress=False)
     print(cph.print_summary())
 
+    # ── PH Assumption Diagnostics ──
+    print('\n  --- PH Assumption Check ---')
+    violated_vars = []
+    try:
+        from lifelines.statistics import proportional_hazard_test
+        ph_result = proportional_hazard_test(cph, train_data, time_transform='rank')
+        summary = getattr(ph_result, 'summary', None)
+        if summary is not None and len(summary) > 0:
+            p_vals = summary['p']
+            for i, p in enumerate(p_vals):
+                is_sig = False
+                try:
+                    is_sig = float(p) < 0.05
+                except (ValueError, TypeError):
+                    is_sig = isinstance(p, str) and p.strip().startswith('<')
+                if is_sig:
+                    idx = summary.index[i]
+                    if isinstance(idx, tuple):
+                        var_name = idx[0]
+                    else:
+                        var_name = str(idx)
+                    if var_name not in violated_vars:
+                        violated_vars.append(var_name)
+        if violated_vars:
+            print(f'  PH violated for {len(violated_vars)} covariate(s): {violated_vars}')
+        else:
+            print('  All covariates satisfy PH assumption (p>=0.05).')
+    except Exception as e:
+        print(f'  PH check failed: {e}')
+
+    if violated_vars:
+        try:
+            schoenfeld_residuals = cph.compute_residuals(train_data, 'schoenfeld')
+            worst_var = violated_vars[0]
+            # schoenfeld_residuals is a DataFrame (lifelines >=0.29); extract column by name
+            if hasattr(schoenfeld_residuals, 'columns') and worst_var in schoenfeld_residuals.columns:
+                resid_vals = schoenfeld_residuals[worst_var].values
+            else:
+                var_cols = [c for c in train_data.columns if c not in ('duration', 'event_churned')]
+                var_idx = var_cols.index(worst_var) if worst_var in var_cols else 0
+                resid_vals = schoenfeld_residuals[:, var_idx] if hasattr(schoenfeld_residuals, 'shape') else schoenfeld_residuals.iloc[:, var_idx].values
+
+            for lang, fig_dir, _ in LANGS:
+                set_font(lang)
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.scatter(range(len(resid_vals)), resid_vals,
+                           alpha=0.3, s=10, color='steelblue')
+                ax.axhline(y=0, color='red', linestyle='--')
+                ax.set_xlabel('Rank of duration' if lang == 'en' else 'Duration排名', fontsize=11)
+                ax.set_ylabel(f'Schoenfeld Residual: {worst_var}', fontsize=11)
+                ax.set_title(f'Schoenfeld Residuals: {worst_var}', fontsize=13)
+                ax.grid(True, linestyle='--', alpha=0.4)
+                plt.tight_layout()
+                plt.savefig(os.path.join(fig_dir, 'figure_schoenfeld.png'), dpi=300, bbox_inches='tight')
+                plt.close()
+            print(f'  Schoenfeld residual plots saved (worst: {worst_var})')
+        except Exception as e:
+            print(f'  Schoenfeld plot failed: {e}')
+
     # Predict
     test_data = X_test.copy()
     surv_funcs = cph.predict_survival_function(test_data)
@@ -250,6 +309,31 @@ def cox_prediction_model(df):
     c_index = concordance_index(actual_days, pred_days, df_clean.loc[X_test.index, 'event_churned'].values)
     mae = mean_absolute_error(actual_days, pred_days)
     print(f'  C-index: {c_index:.4f}, MAE: {mae:.2f} days')
+
+    # ── Random Survival Forest Comparison ──
+    print('\n  --- RSF Comparison ---')
+    rsf_c_index = None
+    try:
+        from sksurv.ensemble import RandomSurvivalForest
+
+        y_train_struct = np.array(
+            [(bool(e), d) for e, d in zip(train_data['event_churned'], train_data['duration'])],
+            dtype=[('event', bool), ('time', float)]
+        )
+        rsf = RandomSurvivalForest(n_estimators=100, min_samples_leaf=5, random_state=RANDOM_SEED)
+        rsf.fit(X_train.values, y_train_struct)
+
+        rsf_risk = rsf.predict(X_test.values)
+        rsf_c_index = concordance_index(
+            df_clean.loc[X_test.index, 'duration'].values,
+            -rsf_risk,
+            df_clean.loc[X_test.index, 'event_churned'].values
+        )
+        print(f'  RSF C-index: {rsf_c_index:.4f} (Cox: {c_index:.4f})')
+    except ImportError as e:
+        print(f'  scikit-survival not available; skipping RSF. ({e})')
+    except Exception as e:
+        print(f'  RSF failed: {e}')
 
     # Bilingual Cox coefficients
     coef_df = cph.summary[['coef', 'exp(coef)']].sort_values('coef')
@@ -297,7 +381,7 @@ def cox_prediction_model(df):
         plt.savefig(os.path.join(fig_dir, 'figure5_pred_vs_actual.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
-    return cph, {'C_index': c_index, 'MAE': mae}
+    return cph, {'C_index': c_index, 'MAE': mae, 'RSF_C_index': rsf_c_index}
 
 
 def segmented_retention(df):
@@ -383,6 +467,7 @@ def main():
         f'中位生存时间: {kmf.median_survival_time_:.1f} 天',
         f'活跃跨度分布: {top_drops}',
         f'Cox: C-index={metrics["C_index"]:.4f}, MAE={metrics["MAE"]:.2f}天',
+        f'RSF: C-index={metrics["RSF_C_index"]:.4f}' if metrics.get("RSF_C_index") is not None else 'RSF: skipped (scikit-survival not available)',
     ]
     with open(os.path.join(RES_DIR, '问题1_results.txt'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(results))
