@@ -48,13 +48,34 @@ def set_font(lang):
 
 
 def load_data():
-    """Load Day3-only feature table (no future information leakage)."""
-    path = os.path.join(DATA_DIR, 'player_features_day3.csv')
-    if not os.path.exists(path):
-        raise FileNotFoundError(f'Day3 feature table not found: {path}. Run 特征工程.py first.')
-    df = pd.read_csv(path)
-    print(f'Loaded {len(df)} players (Day3 features only)')
-    # duration and event_churned are pre-computed with correct churn definition
+    """Load full-period feature table for unified lifecycle_days labels,
+    but use ONLY Day1-3 features for Cox modeling (no future info leakage)."""
+    # Load full-period table for unified labels
+    path_full = os.path.join(DATA_DIR, 'player_features.csv')
+    if not os.path.exists(path_full):
+        raise FileNotFoundError(f'Feature table not found: {path_full}. Run 特征工程.py first.')
+    df_full = pd.read_csv(path_full)
+
+    # Load Day3-only table for Day1-3 features
+    path_d3 = os.path.join(DATA_DIR, 'player_features_day3.csv')
+    if not os.path.exists(path_d3):
+        raise FileNotFoundError(f'Day3 feature table not found: {path_d3}. Run 特征工程.py first.')
+    df_d3 = pd.read_csv(path_d3)
+
+    # Merge: labels (lifecycle_days, is_paying, is_in_league) from full table,
+    # Day1-3 features from Day3 table
+    d3_feature_cols = [c for c in df_d3.columns if c not in ('duration', 'event_churned')]
+    df = df_full[['account_id', 'lifecycle_days', 'is_paying', 'is_in_league']].merge(
+        df_d3[d3_feature_cols], on='account_id', how='inner'
+    )
+
+    # Unified label: duration = min(lifecycle_days, 30), event = lifecycle_days < 30
+    df['duration'] = df['lifecycle_days'].clip(upper=30)
+    df['event_churned'] = (df['lifecycle_days'] < 30).astype(int)
+
+    print(f'Loaded {len(df)} players (unified lifecycle_days label)')
+    print(f'  Churn rate (event=1): {df["event_churned"].mean()*100:.1f}%')
+    print(f'  30-day retention: {(df["lifecycle_days"]>=30).mean()*100:.1f}%')
     return df
 
 
@@ -301,8 +322,8 @@ def segmented_retention(df):
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
         for mask, label, color in [
-            (df['is_pay_d3']==1, pay_label, 'darkorange'),
-            (df['is_pay_d3']==0, nonpay_label, 'steelblue')
+            (df['is_paying']==1, pay_label, 'darkorange'),
+            (df['is_paying']==0, nonpay_label, 'steelblue')
         ]:
             sub = df[mask]
             kmf.fit(sub['duration'], sub['event_churned'], label=label)
@@ -314,8 +335,8 @@ def segmented_retention(df):
         ax1.grid(True, linestyle='--', alpha=0.4)
 
         for mask, label, color in [
-            (df['is_league_d3']==1, league_label, 'darkgreen'),
-            (df['is_league_d3']==0, noleague_label, 'steelblue')
+            (df['is_in_league']==1, league_label, 'darkgreen'),
+            (df['is_in_league']==0, noleague_label, 'steelblue')
         ]:
             sub = df[mask]
             kmf.fit(sub['duration'], sub['event_churned'], label=label)
@@ -330,8 +351,8 @@ def segmented_retention(df):
         plt.savefig(os.path.join(fig_dir, 'figure6_segmented_retention.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
-    for name, mask in [('Paying', df['is_pay_d3']==1), ('Non-Paying', df['is_pay_d3']==0),
-                        ('In League', df['is_league_d3']==1), ('No League', df['is_league_d3']==0)]:
+    for name, mask in [('Paying', df['is_paying']==1), ('Non-Paying', df['is_paying']==0),
+                        ('In League', df['is_in_league']==1), ('No League', df['is_in_league']==0)]:
         sub = df[mask]
         kmf.fit(sub['duration'], sub['event_churned'])
         ret_7 = kmf.survival_function_at_times(7).values[0]
