@@ -759,6 +759,46 @@ def main():
 
     sched_df = generate_strategy_schedule(cluster_profiles)
 
+    # ── Bootstrap Revenue CI (simplified: resample cluster sizes) ──
+    print('\n' + '=' * 50)
+    print('Q3 Bootstrap Revenue CI')
+    print('=' * 50)
+
+    np.random.seed(RANDOM_SEED)
+    n_boot = 200
+    boot_revs = []
+    for b in range(n_boot):
+        if b % 50 == 0:
+            print(f'  Bootstrap: {b}/{n_boot}')
+        # Resample players with replacement, recompute cluster sizes
+        idx = np.random.choice(len(df), size=len(df), replace=True)
+        # Count cluster distribution in bootstrap sample
+        boot_clusters = df.iloc[idx]['cluster'].value_counts()
+        # Scale to N_SIM_PLAYERS
+        boot_sizes = []
+        for cp in cluster_profiles:
+            c = cp['cluster']
+            count = boot_clusters.get(c, 0)
+            boot_sizes.append(max(1, int(count / len(df) * N_SIM_PLAYERS)))
+        # Normalize
+        boot_sizes[-1] += N_SIM_PLAYERS - sum(boot_sizes)
+
+        # Quick revenue estimate: use expected values rather than full MC
+        est_rev = 0
+        for i, cp in enumerate(cluster_profiles):
+            cd = cl_dists[i]
+            n = boot_sizes[i]
+            # Organic pay
+            organic = n * cd['pay_rate'] * cd['mean_pay'] * 6
+            # Strategy pay (simplified from target scheme)
+            strategy = n * cd['pay_rate'] * 30  # rough per-player strategy revenue
+            est_rev += organic + strategy
+        boot_revs.append(est_rev)
+
+    revs_b = np.array(boot_revs)
+    lo, hi = np.percentile(revs_b, [2.5, 97.5])
+    print(f'  Target scheme revenue 95%CI: [{lo:.0f}, {hi:.0f}] CNY (median={np.median(revs_b):.0f})')
+
     results = [
         '=== 问题3 v4 结果 ===',
         f'最优聚类数: {len(cluster_profiles)}',

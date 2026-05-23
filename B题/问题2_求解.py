@@ -13,10 +13,11 @@ warnings.filterwarnings('ignore')
 from scipy import stats
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error, r2_score, roc_auc_score
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBRegressor, XGBClassifier
 import shap
+import statsmodels.api as sm
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei', 'Arial']
 plt.rcParams['axes.unicode_minus'] = False
@@ -350,8 +351,6 @@ def xgboost_total_pay(df):
 
     # ---- Stage 2: Gamma GLM with Log Link (Belotti et al. 2015) ----
     print(f'\n  --- Stage 2: Gamma GLM Log-Link (Payers Only) ---')
-    import statsmodels.api as sm
-    from scipy import stats as scipy_stats
     from sklearn.feature_selection import SelectKBest, f_regression
 
     train_payer_mask = y_train_reg > 0
@@ -501,7 +500,111 @@ def xgboost_total_pay(df):
         'dev_explained': dev_explained, 'n_payers_train': n_payers_train,
         'glm_params': dict(zip(glm_feat_names, zip(glm_result.params, glm_result.pvalues))),
     }
+
+    # Bootstrap uncertainty quantification
+    bootstrap_q2_metrics(df, all_feats)
+
     return clf, glm_result, metrics
+
+
+def bootstrap_q2_metrics(df, all_feats, n_bootstrap=1000):
+    """Bootstrap 95% CI for diamond threshold, stage1 AUC, stage2 GLM coefficients."""
+    print('\n' + '=' * 50)
+    print('Bootstrap Uncertainty Quantification')
+    print('=' * 50)
+
+    np.random.seed(RANDOM_SEED)
+    n = len(df)
+
+    # Storage
+    dia_thresholds = []
+    aucs = []
+
+    for b in range(n_bootstrap):
+        if b % 200 == 0:
+            print(f'  Bootstrap progress: {b}/{n_bootstrap}')
+
+        # Resample with replacement
+        idx = np.random.choice(n, size=n, replace=True)
+        df_boot = df.iloc[idx].copy()
+
+        # 1) Diamond threshold bootstrap
+        df_boot['churned_7d'] = (df_boot['lifecycle_days'] < 7).astype(int)
+        df_boot['log_diamond'] = np.log1p(df_boot['diamond_median'].clip(lower=0))
+        dia_data_b = df_boot[['log_diamond', 'churned_7d']].dropna()
+
+        if len(dia_data_b) > 50 and dia_data_b['churned_7d'].nunique() >= 2:
+            try:
+                lr = LogisticRegression()
+                lr.fit(dia_data_b[['log_diamond']].values, dia_data_b['churned_7d'].values)
+                dia_range = np.linspace(dia_data_b['log_diamond'].min(), dia_data_b['log_diamond'].max(), 100)
+                probs = lr.predict_proba(dia_range.reshape(-1, 1))[:, 1]
+                thresh_idx = np.argmin(np.abs(probs - 0.5))
+                dia_thresholds.append(np.expm1(dia_range[thresh_idx]))
+            except:
+                pass
+
+        # 2) Stage1 AUC bootstrap
+        X_b = df_boot[all_feats].replace([np.inf, -np.inf], np.nan).fillna(0)
+        y_b = df_boot['is_paying'].values
+        if y_b.sum() > 2 and (len(y_b) - y_b.sum()) > 2:
+            try:
+                X_tr, X_te, y_tr, y_te = train_test_split(
+                    X_b, y_b, test_size=0.3, random_state=b, stratify=y_b)
+                n_pos = y_tr.sum()
+                sw = (len(y_tr) - n_pos) / max(1, n_pos)
+                clf_b = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05,
+                                      scale_pos_weight=sw, random_state=RANDOM_SEED, verbosity=0)
+                clf_b.fit(X_tr, y_tr)
+                y_prob = clf_b.predict_proba(X_te)[:, 1]
+                aucs.append(roc_auc_score(y_te, y_prob))
+            except:
+                pass
+
+    # Summarize
+    def ci95(vals, name, unit=''):
+        if len(vals) < 10:
+            print(f'  {name}: insufficient bootstrap samples')
+            return
+        lo, hi = np.percentile(vals, [2.5, 97.5])
+        med = np.median(vals)
+        print(f'  {name}: median={med:.3f}{unit}, 95%CI=[{lo:.3f}{unit}, {hi:.3f}{unit}]')
+
+    if dia_thresholds:
+        ci95(dia_thresholds, 'Diamond Threshold')
+    if aucs:
+        ci95(aucs, 'Stage1 AUC')
+
+    # 3) GLM coefficients bootstrap (on payers only, simplified)
+    payers_df = df[df['total_pay'] > 0].copy()
+    n_payers = len(payers_df)
+    if n_payers >= 10:
+        # Use top-3 features for stability
+        glm_feats = ['diamond_median', 'total_get', 'level_end']
+        glm_coefs = {f: [] for f in glm_feats}
+
+        for b in range(min(n_bootstrap, 500)):
+            idx_p = np.random.choice(n_payers, size=n_payers, replace=True)
+            pay_boot = payers_df.iloc[idx_p]
+            X_p = pay_boot[glm_feats].fillna(0)
+            scaler = StandardScaler()
+            X_p_scaled = scaler.fit_transform(X_p)
+            X_p_glm = sm.add_constant(X_p_scaled)
+            try:
+                glm_b = sm.GLM(pay_boot['total_pay'].values, X_p_glm,
+                              family=sm.families.Gamma(link=sm.families.links.Log()))
+                res_b = glm_b.fit()
+                for j, f in enumerate(glm_feats):
+                    glm_coefs[f].append(np.exp(res_b.params[j+1]))  # exp(coeff)
+            except:
+                continue
+
+        print('\n  Stage2 GLM exp(beta) Bootstrap (95% CI):')
+        for f, vals in glm_coefs.items():
+            if len(vals) > 10:
+                ci95(vals, f'  exp(beta)_{f}')
+
+    return {'dia_thresholds': dia_thresholds, 'aucs': aucs}
 
 
 def main():
