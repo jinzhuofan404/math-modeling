@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from scipy import stats
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei', 'Arial']
@@ -90,16 +90,32 @@ def player_clustering(df):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df_cluster)
 
-    K_range = range(6, 7)  # force K=6 for stable cluster naming
-    inertias, silhouettes = [], []
+    K_range = range(2, 9)  # compare K=2..8 for stability
+    inertias, silhouettes, ch_scores, db_scores, min_cluster_pcts = [], [], [], [], []
     for k in K_range:
         km = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
         labels = km.fit_predict(X_scaled)
         inertias.append(km.inertia_)
         silhouettes.append(silhouette_score(X_scaled, labels))
+        ch_scores.append(calinski_harabasz_score(X_scaled, labels))
+        db_scores.append(davies_bouldin_score(X_scaled, labels))
+        _, counts = np.unique(labels, return_counts=True)
+        min_cluster_pcts.append(counts.min() / counts.sum() * 100)
 
-    best_k = list(K_range)[np.argmax(silhouettes)]
-    print(f'  Optimal K = {best_k} (silhouette = {max(silhouettes):.3f})')
+    print(f'\n  K Comparison Table:')
+    print(f'  {"K":>4} {"Silhouette":>12} {"CH Index":>12} {"DB Index":>12} {"MinCluster%":>12}')
+    print(f'  {"-"*52}')
+    for i, k in enumerate(K_range):
+        print(f'  {k:>4} {silhouettes[i]:>12.4f} {ch_scores[i]:>12.1f} {db_scores[i]:>12.4f} {min_cluster_pcts[i]:>11.1f}%')
+
+    # Select K: prioritize silhouette, penalize tiny clusters (<3%)
+    valid_k = [(i, k, silhouettes[i]) for i, k in enumerate(K_range) if min_cluster_pcts[i] >= 3.0]
+    if valid_k:
+        best_i, best_k, _ = max(valid_k, key=lambda x: x[2])
+    else:
+        best_i = np.argmax(silhouettes)
+        best_k = list(K_range)[best_i]
+    print(f'  Optimal K = {best_k} (Silhouette={silhouettes[best_i]:.3f}, CH={ch_scores[best_i]:.1f}, DB={db_scores[best_i]:.3f}, MinCluster={min_cluster_pcts[best_i]:.1f}%)')
 
     km = KMeans(n_clusters=best_k, random_state=RANDOM_SEED, n_init=10)
     df['cluster'] = km.fit_predict(X_scaled)

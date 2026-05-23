@@ -1,7 +1,5 @@
 cluster_id,name_cn,name_en,mean_pay,pay_rate,mean_lifecycle,mean_level,league_rate
-0,零氪休闲党,F2P Casual,0.00,0.0,19.6,5.5,72.1
-1,零氪流失党,F2P Churner,0.00,0.0,3.2,2.6,2.0
+0,中氪战力党,Mid Spender,0.00,0.1,3.5,2.6,4.1
+1,零氪休闲党,F2P Casual,0.00,0.0,22.2,5.9,76.2
 2,零氪流失党,F2P Churner,0.00,0.0,1.4,0.0,0.0
-3,中氪战力党,Mid Spender,0.61,35.5,57.0,13.8,96.8
-4,高氪核心党,Whale,330.29,100.0,71.0,21.3,100.0
-5,中氪战力党,Mid Spender,2.09,100.0,21.3,7.0,68.9
+3,高氪核心党,Whale,14.02,91.4,32.2,9.4,77.8
