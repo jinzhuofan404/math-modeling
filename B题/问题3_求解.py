@@ -307,7 +307,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
 
     np.random.seed(RANDOM_SEED)
 
-    # ── Quadrant proportions per cluster (tuned) ──
+    # ── Quadrant proportions per cluster ──
     if quadrant_config is None:
         quadrant_config = {
             # name: [Persuadable%, SureThing%, SleepingDog%, LostCause%]
@@ -317,7 +317,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
             "零氪流失党": [0.30, 0.00, 0.05, 0.65],
         }
 
-    # ── Intervention parameters (tuned) ──
+    # ── Intervention parameters by cluster NAME ──
     lambda_by_name = {  # zero-pay: first-purchase conversion baseline
         "零氪休闲党": 0.25,
         "零氪流失党": 0.10,
