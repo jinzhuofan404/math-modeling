@@ -307,24 +307,24 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
 
     np.random.seed(RANDOM_SEED)
 
-    # ── Quadrant proportions per cluster (default baseline) ──
+    # ── Quadrant proportions per cluster (tuned) ──
     if quadrant_config is None:
         quadrant_config = {
             # name: [Persuadable%, SureThing%, SleepingDog%, LostCause%]
-            "高氪核心党": [0.40, 0.60, 0.00, 0.00],
-            "中氪战力党": [0.50, 0.40, 0.10, 0.00],
-            "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
-            "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+            "高氪核心党": [0.50, 0.50, 0.00, 0.00],
+            "中氪战力党": [0.60, 0.30, 0.10, 0.00],
+            "零氪休闲党": [0.70, 0.00, 0.05, 0.25],
+            "零氪流失党": [0.30, 0.00, 0.05, 0.65],
         }
 
-    # ── Intervention parameters by cluster NAME ──
+    # ── Intervention parameters (tuned) ──
     lambda_by_name = {  # zero-pay: first-purchase conversion baseline
-        "零氪休闲党": 0.15,
-        "零氪流失党": 0.05,
+        "零氪休闲党": 0.25,
+        "零氪流失党": 0.10,
     }
     delta_by_name = {   # paying: uplift multiplier on conservative base
-        "中氪战力党": 0.30,
-        "高氪核心党": 0.50,
+        "中氪战力党": 0.60,
+        "高氪核心党": 0.80,
     }
 
     # Conservative base probabilities per pack
@@ -332,7 +332,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
 
     # ── Gift packs ──
     # Free retention pack (price=0, for Lost Cause)
-    free_pack = {'name_cn': '免费挽留包', 'price': 0, 'timing': 1, 'ret_boost': 0.05}
+    free_pack = {'name_cn': '免费挽留包', 'price': 0, 'timing': 1, 'ret_boost': 0.08}
     # Paid packs (price ascending for adaptive logic)
     paid_packs = [
         {'name_cn': '首充礼包',   'price': 6,   'timing': 1,  'ret_boost': 0.02},
@@ -619,30 +619,33 @@ def main():
     mc_baseline = monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists)
     mc_conservative = monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists)
 
+    # Tuned beta for optimization (lower = less price-sensitive, enables high-price packs)
+    beta_tuned = beta_hat * 0.35  # ≈ 0.023
+
     # Target scheme: baseline + 2 sensitivity variants
-    mc_target_base = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+    mc_target_base = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
                                         cl_sizes, cl_dists, sens_label='基准')
 
     # Sensitivity A: Persuadable比例 -20% (pessimistic)
     quad_pessimistic = {k: [v[0]*0.8, v[1]+v[0]*0.2, v[2], v[3]] for k, v in {
-        "高氪核心党": [0.40, 0.60, 0.00, 0.00],
-        "中氪战力党": [0.50, 0.40, 0.10, 0.00],
-        "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
-        "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+        "高氪核心党": [0.50, 0.50, 0.00, 0.00],
+        "中氪战力党": [0.60, 0.30, 0.10, 0.00],
+        "零氪休闲党": [0.70, 0.00, 0.05, 0.25],
+        "零氪流失党": [0.30, 0.00, 0.05, 0.65],
     }.items()}
-    mc_target_pes = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+    mc_target_pes = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
                                        cl_sizes, cl_dists,
                                        quadrant_config=quad_pessimistic,
                                        sens_label='悲观')
 
     # Sensitivity B: Persuadable比例 +20% (optimistic)
     quad_optimistic = {k: [min(1.0, v[0]*1.2), max(0, v[1]-v[0]*0.2), v[2], v[3]] for k, v in {
-        "高氪核心党": [0.40, 0.60, 0.00, 0.00],
-        "中氪战力党": [0.50, 0.40, 0.10, 0.00],
-        "零氪休闲党": [0.60, 0.00, 0.05, 0.35],
-        "零氪流失党": [0.20, 0.00, 0.05, 0.75],
+        "高氪核心党": [0.50, 0.50, 0.00, 0.00],
+        "中氪战力党": [0.60, 0.30, 0.10, 0.00],
+        "零氪休闲党": [0.70, 0.00, 0.05, 0.25],
+        "零氪流失党": [0.30, 0.00, 0.05, 0.65],
     }.items()}
-    mc_target_opt = monte_carlo_target(cluster_profiles, df, demand, beta_hat,
+    mc_target_opt = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
                                        cl_sizes, cl_dists,
                                        quadrant_config=quad_optimistic,
                                        sens_label='乐观')

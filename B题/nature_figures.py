@@ -583,9 +583,9 @@ def fig10_monte_carlo(df):
     """Problem 3: Three-scheme MC comparison (baseline / conservative / exploration)."""
     # Final 5000-MC results (hardcoded from _final_run.py)
     schemes = [
-        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 33839,  'ret': 7.1},
-        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 54308, 'ret': 7.2},
-        {'name_cn': '优化\n(混合)',   'name_en': 'Optimization\n(Hybrid)', 'rev': 53608, 'ret': 10.0},
+        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 33632,  'ret': 7.1},
+        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 54366, 'ret': 7.2},
+        {'name_cn': '优化\n(混合)',   'name_en': 'Optimization\n(Hybrid)', 'rev': 71045, 'ret': 11.3},
     ]
     colors = [PAL["neutral_dark"], PAL["blue"], PAL["green_dark"]]
     target_rev, target_ret = 70000, 10.0
