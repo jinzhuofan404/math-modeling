@@ -581,11 +581,11 @@ def fig9_xgb_importance(df):
 # ═══════════════════════════════════════════════════════════════
 def fig10_monte_carlo(df):
     """Problem 3: Three-scheme MC comparison (baseline / conservative / exploration)."""
-    # Final 5000-MC results (hardcoded from _final_run.py)
+    # Final 5000-MC results (K=4, updated from Q3 run)
     schemes = [
-        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 33632,  'ret': 7.1},
-        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 54366, 'ret': 7.2},
-        {'name_cn': '优化\n(混合)',   'name_en': 'Optimization\n(Hybrid)', 'rev': 71045, 'ret': 11.3},
+        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 31280,  'ret': 7.1},
+        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 51886, 'ret': 7.2},
+        {'name_cn': '优化\n(探索)',   'name_en': 'Optimization\n(Exploration)', 'rev': 63043, 'ret': 8.5},
     ]
     colors = [PAL["neutral_dark"], PAL["blue"], PAL["green_dark"]]
     target_rev, target_ret = 70000, 10.0
@@ -863,7 +863,7 @@ def fig13_xgb_pred(df):
 # Figure 14: 3D Cluster Visualization
 # ═══════════════════════════════════════════════════════════════
 def fig14_cluster_3d(df):
-    """Core claim: 6 player clusters separate along lifecycle, pay, and level axes."""
+    """Core claim: Player clusters separate along lifecycle, pay, and level axes (optimal K)."""
     feats = ['days_active','lifecycle_days','level_end','level_growth_rate',
              'is_paying','total_pay','is_in_league','vip_level_max',
              'diamond_median','total_get','total_reduce']
@@ -872,31 +872,40 @@ def fig14_cluster_3d(df):
         dc[f'log_{c}'] = np.log1p(dc[c].clip(0)); del dc[c]
     dc = dc.fillna(0)
     scl = StandardScaler(); Xs = scl.fit_transform(dc)
-    km = KMeans(n_clusters=6, random_state=RANDOM_SEED, n_init=10)
+    # Find optimal K via silhouette
+    Kr = range(2, 8)
+    sil_scores = []
+    for k in Kr:
+        km_tmp = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
+        lb_tmp = km_tmp.fit_predict(Xs)
+        sil_scores.append(silhouette_score(Xs, lb_tmp))
+    optimal_k = list(Kr)[np.argmax(sil_scores)]
+    km = KMeans(n_clusters=optimal_k, random_state=RANDOM_SEED, n_init=10)
     labels = km.fit_predict(Xs)
 
     lc_idx = dc.columns.get_loc('lifecycle_days')
     lp_idx = dc.columns.get_loc('log_total_pay')
     le_idx = dc.columns.get_loc('level_end')
 
-    # Custom 6-cluster discrete palette (Nature-friendly, distinguishable)
-    cluster_colors = [PAL["blue"], PAL["teal"], PAL["green_dark"],
-                      PAL["orange"], PAL["violet"], PAL["red"]]
+    # Adaptive cluster palette (Nature-friendly, distinguishable)
+    all_cluster_colors = [PAL["blue"], PAL["teal"], PAL["green_dark"],
+                          PAL["orange"], PAL["violet"], PAL["red"], PAL["blue_sec"]]
+    cluster_colors = all_cluster_colors[:optimal_k]
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
-            title, xl, yl, zl = '3D 玩家聚类可视化', '生命周期', '对数总付费', '最高等级'
+            title, xl, yl, zl = f'3D 玩家聚类可视化 (K={optimal_k})', '生命周期', '对数总付费', '最高等级'
             cl = '聚类'
         else:
-            title, xl, yl, zl = '3D Player Cluster Visualization', 'Lifecycle', 'Log Total Pay', 'Max Level'
+            title, xl, yl, zl = f'3D Player Cluster Visualization (K={optimal_k})', 'Lifecycle', 'Log Total Pay', 'Max Level'
             cl = 'Cluster'
 
         fig = plt.figure(figsize=(7, 5.5))
         ax = fig.add_subplot(111, projection='3d')
 
         # Plot each cluster separately for discrete colors
-        for c in range(6):
+        for c in range(optimal_k):
             mask = labels == c
             ax.scatter(Xs[mask, lc_idx], Xs[mask, lp_idx], Xs[mask, le_idx],
                        c=cluster_colors[c], s=18, alpha=0.65, linewidths=0,
@@ -941,7 +950,7 @@ def fig14_cluster_3d(df):
 # Figure 15: Monte Carlo Convergence
 # ═══════════════════════════════════════════════════════════════
 def fig15_mc_convergence(df):
-    """Core claim: Revenue estimate stabilizes after ~500 simulations."""
+    """Core claim: Revenue estimate stabilizes after ~500 simulations (optimal K)."""
     np.random.seed(RANDOM_SEED)
     dc = df[['days_active','lifecycle_days','level_end','level_growth_rate',
              'is_paying','total_pay','is_in_league','vip_level_max','diamond_median',
@@ -949,11 +958,19 @@ def fig15_mc_convergence(df):
     for c in ['total_pay','diamond_median','total_get','total_reduce']:
         dc[f'log_{c}']=np.log1p(dc[c].clip(0)); del dc[c]
     Xs = StandardScaler().fit_transform(dc)
-    labels = KMeans(n_clusters=6, random_state=RANDOM_SEED, n_init=10).fit_predict(Xs)
+    # Find optimal K via silhouette
+    Kr = range(2, 8)
+    sil_scores = []
+    for k in Kr:
+        km_tmp = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
+        lb_tmp = km_tmp.fit_predict(Xs)
+        sil_scores.append(silhouette_score(Xs, lb_tmp))
+    optimal_k = list(Kr)[np.argmax(sil_scores)]
+    labels = KMeans(n_clusters=optimal_k, random_state=RANDOM_SEED, n_init=10).fit_predict(Xs)
     df['cl'] = labels
 
     profiles = []
-    for c in range(6):
+    for c in range(optimal_k):
         s = df[df['cl']==c]
         profiles.append({'pct':len(s)/len(df), 'pay_rate':s['is_paying'].mean(),
                          'ml':s['lifecycle_days'].mean(), 'mp':max(0.1,s['total_pay'].mean()),
