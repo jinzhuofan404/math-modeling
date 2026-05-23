@@ -64,10 +64,11 @@ def load_data():
 
     # Merge: labels (lifecycle_days, is_paying, is_in_league) from full table,
     # Day1-3 features from Day3 table
-    d3_feature_cols = [c for c in df_d3.columns if c not in ('duration', 'event_churned')]
+    d3_feature_cols = [c for c in df_d3.columns if c not in ('duration', 'event_churned', 'country', 'platform', 'channel_id', 'media_source')]
     df = df_full[['account_id', 'lifecycle_days', 'is_paying', 'is_in_league']].merge(
         df_d3[d3_feature_cols], on='account_id', how='inner'
     )
+    print(f'  Merge: {len(df_full)} full + {len(df_d3)} d3 -> {len(df)} joined')
 
     # Unified label: duration = min(lifecycle_days, 30), event = lifecycle_days < 30
     df['duration'] = df['lifecycle_days'].clip(upper=30)
@@ -160,32 +161,33 @@ def km_survival_curve(df):
 
 
 def churn_key_moments(df):
-    """(2) Key churn moments with bilingual output."""
+    """(2) Survival span distribution with bilingual output."""
     print('\n' + '=' * 50)
-    print('1.2 Key Churn Time Points')
+    print('1.2 Survival Span Distribution')
     print('=' * 50)
 
     active_dist = df['days_logged_d3'].value_counts().sort_index()
-    # Use duration for survival curve
+    # Count players whose lifecycle_days >= each day threshold
     days_arr = np.arange(1, 31)
     day_counts = [len(df[df['duration'] >= d]) for d in days_arr]
+    # Players whose lifecycle ended exactly at each day (i.e. lifecycle_days < day)
     day_drops = [day_counts[i-1] - day_counts[i] for i in range(1, len(day_counts))]
     day_drop_rate = [day_drops[i] / max(day_counts[i], 1) for i in range(len(day_drops))]
     top_drops = sorted(zip(range(2, 31), day_drop_rate), key=lambda x: x[1], reverse=True)[:5]
-    print('  Highest churn rate days:')
+    print('  Highest lifecycle-end rate days (fraction whose lifecycle ended at day N):')
     for day, rate in top_drops:
-        print(f'    Day {day}: {rate*100:.1f}% drop')
+        print(f'    Day {day}: {rate*100:.1f}% of surviving players ended at this day')
 
     label_dicts = {
         'cn': {
             't1': '玩家活跃天数分布', 't2': '各天数阈值留存玩家数',
             'x1': '活跃天数', 'y1': '玩家数',
-            'x2': '天数阈值', 'y2': '存活≥X天的玩家数',
+            'x2': '活跃天数阈值', 'y2': '存活≥X天的玩家数',
         },
         'en': {
             't1': 'Distribution of Player Active Days', 't2': 'Players Surviving >= Day Threshold',
             'x1': 'Active Days', 'y1': 'Number of Players',
-            'x2': 'Day Threshold', 'y2': 'Players Surviving >= Day X',
+            'x2': 'Lifecycle Days', 'y2': 'Players Surviving >= Day X',
         }
     }
     for lang, fig_dir, _ in LANGS:
@@ -379,7 +381,7 @@ def main():
         f'14日留存率: {kmf.survival_function_at_times(14).values[0]*100:.2f}%',
         f'30日留存率: {kmf.survival_function_at_times(30).values[0]*100:.2f}%',
         f'中位生存时间: {kmf.median_survival_time_:.1f} 天',
-        f'流失关键节点: {top_drops}',
+        f'活跃跨度分布: {top_drops}',
         f'Cox: C-index={metrics["C_index"]:.4f}, MAE={metrics["MAE"]:.2f}天',
     ]
     with open(os.path.join(RES_DIR, '问题1_results.txt'), 'w', encoding='utf-8') as f:
