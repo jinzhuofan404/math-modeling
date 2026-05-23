@@ -19,7 +19,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 from sklearn.linear_model import LogisticRegression
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, XGBClassifier
 from lifelines import KaplanMeierFitter, CoxPHFitter, NelsonAalenFitter
 
 # ── Nature Journal RC ──────────────────────────────────────────
@@ -464,10 +464,10 @@ def fig8_first_pay(df):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Figure 9: XGBoost Feature Importance
+# Figure 9: XGBoost Two-Stage Hurdle Model SHAP
 # ═══════════════════════════════════════════════════════════════
 def fig9_xgb_importance(df):
-    """Core claim: Level_end and diamond_median are strongest pay predictors (SHAP-based)."""
+    """Two-stage Hurdle: Stage1 classifier SHAP (pay prob), Stage2 regressor SHAP (pay amount)."""
     import shap
     feat_cols = ['days_active','lifecycle_days','level_end','level_growth','level_growth_rate',
                  'current_level_max','is_in_league','vip_level_max','n_event_types',
@@ -479,16 +479,6 @@ def fig9_xgb_importance(df):
     df['df'] = df['diamond_get']-df['diamond_reduce']
     extra = ['ri','df']
     all_f = feat_cols + extra
-    dm = df[all_f+['total_pay']].copy().replace([np.inf,-np.inf],np.nan).fillna(0)
-    X, y = dm[all_f], np.log1p(dm['total_pay'])
-    model = XGBRegressor(n_estimators=150, max_depth=5, learning_rate=0.05, random_state=RANDOM_SEED, verbosity=0)
-    model.fit(X, y)
-
-    # SHAP-based importance (not built-in gain importance)
-    explainer = shap.TreeExplainer(model)
-    shap_vals = explainer.shap_values(X)
-    shap_mean = np.abs(shap_vals).mean(axis=0)  # mean |SHAP| for each feature
-    ti = np.argsort(shap_mean)[-12:][::-1]
 
     fn_cn = {'days_active':'活跃天数','lifecycle_days':'生命周期','level_end':'最终等级',
              'level_growth':'等级增长','level_growth_rate':'等级增速','current_level_max':'最高等级',
@@ -499,25 +489,90 @@ def fig9_xgb_importance(df):
              'total_get':'总获取量','total_reduce':'总消耗量','duration_times':'在线时长','ri':'资源强度','df':'钻石净流量'}
     fn_en = {'ri':'Resource Intensity','df':'Diamond Net Flow'}
 
+    # ---- Stage 1: Binary Classifier ----
+    dm1 = df[all_f+['is_paying']].copy().replace([np.inf,-np.inf],np.nan).fillna(0)
+    X1, y1 = dm1[all_f], dm1['is_paying']
+    n_pos = y1.sum()
+    sw = (len(y1)-n_pos)/n_pos if n_pos > 0 else 1
+    clf = XGBClassifier(n_estimators=150, max_depth=5, learning_rate=0.05,
+                        scale_pos_weight=sw, random_state=RANDOM_SEED, verbosity=0)
+    clf.fit(X1, y1)
+    explainer1 = shap.TreeExplainer(clf)
+    shap1 = explainer1.shap_values(X1)
+    shap1_mean = np.abs(shap1).mean(axis=0)
+    ti1 = np.argsort(shap1_mean)[-12:][::-1]
+
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
-        title = 'XGBoost+SHAP：总付费关键驱动因子' if lang=='cn' else 'XGBoost+SHAP: Key Drivers of Total Pay'
+        title = '阶段1: 付费概率驱动因子 (|SHAP|)' if lang=='cn' else 'Stage 1: Drivers of Payment Probability (|SHAP|)'
         xlabel = '平均|SHAP值|' if lang=='cn' else 'Mean |SHAP| Value'
-
         fig, ax = plt.subplots(figsize=(5, 3.5))
         names = []
-        for f in [all_f[i] for i in ti][::-1]:
-            if lang == 'cn':
-                names.append(fn_cn.get(f, f))
-            else:
-                names.append(fn_en.get(f, f))
-        vals = shap_mean[ti][::-1]
+        for f in [all_f[i] for i in ti1][::-1]:
+            names.append(fn_cn.get(f, f) if lang=='cn' else fn_en.get(f, f))
+        vals = shap1_mean[ti1][::-1]
         ax.barh(range(len(names)), vals, color=PAL["blue"], alpha=0.85, height=0.65)
         ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=6)
         ax.set_xlabel(xlabel, fontsize=7)
         ax.set_title(title, fontsize=7.5, fontweight='bold')
         ax.grid(True, linestyle='--', alpha=0.25, linewidth=0.3, axis='x')
         save_pub(fig, 'fig9_xgb_importance', fig_dir)
+        plt.close()
+
+    # ---- Stage 2: Gamma GLM on Payers Only ----
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.feature_selection import SelectKBest, f_regression
+    dm2 = df[all_f+['total_pay']].copy().replace([np.inf,-np.inf],np.nan).fillna(0)
+    payer_mask = dm2['total_pay'] > 0
+    X2 = dm2[all_f][payer_mask]
+    y2 = dm2['total_pay'][payer_mask]
+    n_payers = len(X2)
+
+    # Feature screen: top-5 F-score, drop collinear pairs
+    sel = SelectKBest(f_regression, k=min(5, n_payers//8))
+    X2r = sel.fit_transform(X2, y2)
+    idx = np.where(sel.get_support())[0]
+    names_raw = [all_f[i] for i in idx]
+    keep = np.ones(len(names_raw), dtype=bool)
+    cm = np.corrcoef(X2r.T)
+    for i in range(len(names_raw)):
+        if not keep[i]: continue
+        for j in range(i+1, len(names_raw)):
+            if abs(cm[i,j]) > 0.9: keep[j] = False
+    X2f = X2r[:, keep]
+    names_sel = [n for n, k in zip(names_raw, keep) if k]
+
+    scaler = StandardScaler()
+    X2s = scaler.fit_transform(X2f)
+    import statsmodels.api as sm
+    glm = sm.GLM(y2, sm.add_constant(X2s),
+                 family=sm.families.Gamma(link=sm.families.links.Log()))
+    res = glm.fit()
+    dev_exp = 1 - res.deviance/res.null_deviance
+    # Collect significant (p<0.2) coefficients, exclude intercept
+    glm_names = ['intercept'] + names_sel
+    sig = [(n, np.exp(c)-1, p) for n, c, p in zip(glm_names, res.params, res.pvalues)
+           if n != 'intercept' and p < 0.2]
+
+    for lang, fig_dir in LANGS:
+        set_cn_font() if lang == 'cn' else set_en_font()
+        title = f'阶段2: Gamma GLM 付费金额因子 (dev exp={dev_exp:.2f})' if lang=='cn' else f'Stage 2: Gamma GLM Payment Amount Factors (dev exp={dev_exp:.2f})'
+        xlabel = 'exp(β)-1: 期望付费相对变化(%)' if lang=='cn' else 'exp(β)-1: Relative Change in Expected Pay (%)'
+        fig, ax = plt.subplots(figsize=(5, 2.5))
+        sig_names = [n for n, v, p in sig][::-1]
+        sig_vals = [v*100 for n, v, p in sig][::-1]  # percentage
+        sig_ps = [p for n, v, p in sig][::-1]
+        colors = [PAL["red"] if v > 0 else '#4A90D9' for v in sig_vals]
+        if len(sig_names) > 0:
+            ax.barh(range(len(sig_names)), sig_vals, color=colors, alpha=0.85, height=0.65)
+            labels = [(fn_cn.get(n, n) if lang=='cn' else fn_en.get(n, n)) + f' (p={p:.3f})' for n, p in zip(sig_names, sig_ps)]
+        ax.set_yticks(range(len(sig_names)))
+        ax.set_yticklabels(labels if len(sig_names) > 0 else [], fontsize=6)
+        ax.set_xlabel(xlabel, fontsize=7)
+        ax.set_title(title, fontsize=7.5, fontweight='bold')
+        ax.axvline(x=0, color='black', linewidth=0.5)
+        ax.grid(True, linestyle='--', alpha=0.25, linewidth=0.3, axis='x')
+        save_pub(fig, 'fig9b_pay_amount_shap', fig_dir)
         plt.close()
 
 

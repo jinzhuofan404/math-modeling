@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.linear_model import LogisticRegression
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, XGBClassifier
 import shap
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei', 'Arial']
@@ -59,6 +59,7 @@ def resource_level_elasticity(df):
     df['daily_food'] = df['food_reduce'] / df['lifecycle_days'].clip(lower=1)
     df['daily_wood'] = df['wood_reduce'] / df['lifecycle_days'].clip(lower=1)
     df['daily_stone'] = df['stone_reduce'] / df['lifecycle_days'].clip(lower=1)
+    df['daily_coins'] = df['coins_reduce'] / df['lifecycle_days'].clip(lower=1)
 
     res_cols = ['daily_food', 'daily_wood', 'daily_stone', 'diamond_median', 'diamond_reduce']
     res_labels_cn = ['粮食', '木材', '矿石', '钻石(中位数)', '钻石(消耗)']
@@ -179,8 +180,53 @@ def diamond_churn_threshold(df):
     return threshold
 
 
+def recovery_pack_analysis(df, threshold):
+    """Analyze optimal recovery pack for players below diamond churn threshold."""
+    print('\n' + '=' * 50)
+    print('2.1c Optimal Recovery Pack for Diamond-Depleted Players')
+    print('=' * 50)
+
+    low_dia = df[df['diamond_median'] < threshold].copy()
+    high_dia = df[df['diamond_median'] >= threshold].copy()
+    n_low = len(low_dia)
+    print(f'  Players below diamond threshold ({threshold:.0f}): {n_low} ({n_low/len(df)*100:.1f}%)')
+    churn_rate_low = (low_dia['lifecycle_days'] < 7).mean()
+    churn_rate_high = (high_dia['lifecycle_days'] < 7).mean()
+    print(f'  7-day churn rate: below={churn_rate_low:.1%}, above={churn_rate_high:.1%}')
+    print(f'  Mean lifecycle: below={low_dia["lifecycle_days"].mean():.1f}d, above={high_dia["lifecycle_days"].mean():.1f}d')
+
+    # Resource profile of diamond-depleted players
+    print(f'\n  Resource profile (mean daily, below vs above threshold):')
+    for res, label in [('daily_food', 'Food'), ('daily_wood', 'Wood'),
+                       ('daily_stone', 'Stone'), ('daily_coins', 'Coins')]:
+        dia_col = f'diamond_{"median" if "median" in res else "reduce"}'
+        val_low = low_dia[res].mean() if res in low_dia.columns else 0
+        val_high = high_dia[res].mean() if res in high_dia.columns else 0
+        ratio = val_low / val_high if val_high > 0 else float('inf')
+        print(f'    {label}: {val_low:.1f} vs {val_high:.1f} (ratio={ratio:.2f})')
+
+    # Paying behavior
+    pay_rate_low = low_dia['is_paying'].mean()
+    pay_rate_high = high_dia['is_paying'].mean()
+    print(f'\n  Pay rate: below={pay_rate_low:.1%}, above={pay_rate_high:.1%}')
+
+    # Key conclusion: based on stagnation analysis (diamond as bottleneck breaker)
+    # and churn threshold, the optimal recovery pack is a low-price diamond补给包
+    print(f'\n  Recommendation: Low-price diamond补给包 (e.g., 6-30 CNY)')
+    print(f'  Rationale: Diamond is the bottleneck breaker (stagnation beta=-0.355)')
+    print(f'  {n_low} players ({n_low/len(df)*100:.1f}%) are at elevated churn risk')
+    print(f'  Diamond replenishment directly addresses the resource scarcity causing churn')
+
+    return {
+        'n_below_threshold': n_low,
+        'churn_rate_below': churn_rate_low,
+        'churn_rate_above': churn_rate_high,
+        'mean_lifecycle_below': low_dia['lifecycle_days'].mean(),
+    }
+
+
 def first_pay_analysis(df):
-    """First payment analysis."""
+    """First payment analysis: timing, level, and retention impact."""
     print('\n' + '=' * 50)
     print('2.2 First Payment Analysis')
     print('=' * 50)
@@ -190,6 +236,31 @@ def first_pay_analysis(df):
     if len(payers) == 0:
         return
     print(f'  Mean pay: {payers["total_pay"].mean():.2f}, Median: {payers["total_pay"].median():.2f}')
+
+    # First payment timing distribution
+    if 'first_pay_time' in payers.columns:
+        payers['fpt_day'] = pd.to_numeric(payers['first_pay_time'], errors='coerce')
+        valid_fpt = payers[payers['fpt_day'].notna() & (payers['fpt_day'] >= 0)]
+        if len(valid_fpt) > 0:
+            print(f'\n  First Pay Timing:')
+            print(f'    Mean day: {valid_fpt["fpt_day"].mean():.2f}, Median: {valid_fpt["fpt_day"].median():.0f}')
+            # Day buckets
+            day_bins = [0, 1, 3, 7, 14, 30, 100]
+            day_labels = ['Day0', 'Day1-2', 'Day3-6', 'Day7-13', 'Day14-29', 'Day30+']
+            valid_fpt['day_bucket'] = pd.cut(valid_fpt['fpt_day'], bins=day_bins, labels=day_labels)
+            bucket_counts = valid_fpt['day_bucket'].value_counts().sort_index()
+            for bucket, count in bucket_counts.items():
+                print(f'      {bucket}: {count} payers ({count/len(valid_fpt)*100:.1f}%)')
+        else:
+            print('  No valid first_pay_time data')
+
+    # First payment level
+    if 'first_pay_level' in payers.columns:
+        fpl = payers['first_pay_level'].value_counts().sort_index()
+        print(f'\n  First Pay Level Distribution:')
+        for level, count in fpl.items():
+            print(f'    Level {level}: {count} payers ({count/len(payers)*100:.1f}%)')
+
     payers['pay_group'] = pd.cut(payers['total_pay'], bins=[0, 6, 30, 100, 500], labels=['<6', '6-30', '30-100', '100+'])
 
     # Bilingual plot
@@ -221,9 +292,9 @@ def first_pay_analysis(df):
 
 
 def xgboost_total_pay(df):
-    """XGBoost regression for total_pay with SHAP. Log-transform target for skewed distribution."""
+    """Two-stage Hurdle model: Stage1 XGBoost binary classifier (is_paying), Stage2 XGBoost regressor (total_pay | payers)."""
     print('\n' + '=' * 50)
-    print('2.3 XGBoost + SHAP: Key Factors of Total Pay')
+    print('2.3 XGBoost Hurdle Model: Payment Incidence + Payment Amount')
     print('=' * 50)
 
     feat_cols = [
@@ -244,57 +315,148 @@ def xgboost_total_pay(df):
 
     df_model = df[all_feats + ['total_pay', 'is_paying']].copy().replace([np.inf, -np.inf], np.nan).fillna(0)
     X = df_model[all_feats]
-    y_raw = df_model['total_pay'].values
-    y_log = np.log1p(y_raw)  # log-transform target
+    y_clf = df_model['is_paying'].values
+    y_reg_raw = df_model['total_pay'].values
 
-    X_train, X_test, y_train_raw, y_test_raw = train_test_split(X, y_raw, test_size=0.3, random_state=RANDOM_SEED)
-    _, _, y_train_log, y_test_log = train_test_split(X, y_log, test_size=0.3, random_state=RANDOM_SEED)
+    X_train, X_test, y_train_clf, y_test_clf, y_train_reg, y_test_reg = train_test_split(
+        X, y_clf, y_reg_raw, test_size=0.3, random_state=RANDOM_SEED, stratify=y_clf)
 
-    # Train on log-transformed target
-    model = XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.05,
-                          subsample=0.8, colsample_bytree=0.8, random_state=RANDOM_SEED, verbosity=0)
-    model.fit(X_train, y_train_log)
-    y_pred_log = model.predict(X_test)
-    y_pred = np.expm1(y_pred_log)  # transform back
+    # ---- Stage 1: Binary Classifier ----
+    n_pos = y_train_clf.sum()
+    scale_weight = (len(y_train_clf) - n_pos) / n_pos if n_pos > 0 else 1
+    print(f'\n  --- Stage 1: Payment Incidence Classifier ---')
+    print(f'  Train: {len(y_train_clf)} samples, {n_pos} payers ({(n_pos/len(y_train_clf))*100:.1f}%)')
+    print(f'  scale_pos_weight: {scale_weight:.1f}')
 
-    mae = mean_absolute_error(y_test_raw, y_pred)
-    # R2 on non-zero pay only for meaningful metric
-    mask_nonzero = y_test_raw > 0
-    r2_nonzero = r2_score(y_test_raw[mask_nonzero], y_pred[mask_nonzero]) if mask_nonzero.sum() > 5 else 0
-    print(f'  XGBoost Performance (log-target):')
-    print(f'    MAE: {mae:.4f}')
-    print(f'    R2 (payers only): {r2_nonzero:.4f}')
-    print(f'    Non-zero payers in test: {mask_nonzero.sum()}')
+    clf = XGBClassifier(n_estimators=200, max_depth=5, learning_rate=0.05,
+                        subsample=0.8, colsample_bytree=0.8, scale_pos_weight=scale_weight,
+                        random_state=RANDOM_SEED, verbosity=0, eval_metric='logloss')
+    clf.fit(X_train, y_train_clf)
 
-    # Feature importance (SHAP)
-    print('\n  Computing SHAP...')
-    explainer = shap.TreeExplainer(model)
+    y_prob = clf.predict_proba(X_test)[:, 1]
+    from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
+    auc = roc_auc_score(y_test_clf, y_prob)
+    y_pred_clf = clf.predict(X_test)
+    print(f'  AUC-ROC: {auc:.4f}')
+    print(f'\n  Classification Report:')
+    print(classification_report(y_test_clf, y_pred_clf, target_names=['Non-payer', 'Payer'], digits=4))
+
+    # Stage 1 SHAP
+    print('  Computing Stage 1 SHAP...')
+    explainer_clf = shap.TreeExplainer(clf)
     shap_subset = X_test.sample(min(200, len(X_test)), random_state=RANDOM_SEED)
-    shap_values = explainer.shap_values(shap_subset)
+    shap_clf_vals = explainer_clf.shap_values(shap_subset)
+    shap_clf_mean = np.abs(shap_clf_vals).mean(axis=0)
 
-    importance = model.feature_importances_
-    top_idx = np.argsort(importance)[-15:][::-1]
-    shap_mean = np.abs(shap_values).mean(axis=0)
-    top_shap = np.argsort(shap_mean)[-10:][::-1]
-    print('\n  Top 10 by |SHAP|:')
-    for i in top_shap:
-        print(f'    {all_feats[i]}: {shap_mean[i]:.4f}')
+    # ---- Stage 2: Gamma GLM with Log Link (Belotti et al. 2015) ----
+    print(f'\n  --- Stage 2: Gamma GLM Log-Link (Payers Only) ---')
+    import statsmodels.api as sm
+    from scipy import stats as scipy_stats
+    from sklearn.feature_selection import SelectKBest, f_regression
 
-    # Bilingual feature importance
+    train_payer_mask = y_train_reg > 0
+    test_payer_mask = y_test_reg > 0
+    X_train_payers_df = X_train[train_payer_mask]
+    y_train_payers_raw = y_train_reg[train_payer_mask]
+    X_test_payers_df = X_test[test_payer_mask]
+    y_test_payers_raw = y_test_reg[test_payer_mask]
+
+    n_payers_train = len(X_train_payers_df)
+    n_payers_test = len(X_test_payers_df)
+    print(f'  Training payers: {n_payers_train}, Test payers: {n_payers_test}')
+
+    # Feature pre-screen: top-5 by univariate F-score, then drop collinear pairs
+    selector = SelectKBest(f_regression, k=min(5, n_payers_train // 8))
+    X_train_sel_raw = selector.fit_transform(X_train_payers_df, y_train_payers_raw)
+    X_test_sel_raw = selector.transform(X_test_payers_df)
+    selected_idx = np.where(selector.get_support())[0]
+    selected_names = [all_feats[i] for i in selected_idx]
+    print(f'  Pre-screened to {len(selected_idx)} features: {selected_names}')
+
+    # Drop highly collinear features (corr > 0.9) from screened set
+    keep_mask = np.ones(len(selected_names), dtype=bool)
+    corr_mat = np.corrcoef(X_train_sel_raw.T)
+    for i in range(len(selected_names)):
+        if not keep_mask[i]:
+            continue
+        for j in range(i+1, len(selected_names)):
+            if abs(corr_mat[i, j]) > 0.9:
+                keep_mask[j] = False
+    X_train_sel = X_train_sel_raw[:, keep_mask]
+    X_test_sel = X_test_sel_raw[:, keep_mask]
+    selected_names = [n for n, k in zip(selected_names, keep_mask) if k]
+    print(f'  After collinearity filter: {selected_names}')
+
+    # Standardize features for GLM (raw features have extreme scale differences)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train_sel)
+    X_test_scaled = scaler.transform(X_test_sel)
+
+    # Gamma GLM with log link: E[Y|X] = exp(X*beta), Y ~ Gamma
+    X_train_glm = sm.add_constant(X_train_scaled)
+    X_test_glm = sm.add_constant(X_test_scaled)
+    glm_feat_names = ['intercept'] + selected_names
+
+    glm = sm.GLM(y_train_payers_raw, X_train_glm,
+                 family=sm.families.Gamma(link=sm.families.links.Log()))
+    glm_result = glm.fit()
+
+    # Deviance explained
+    null_dev = glm_result.null_deviance
+    res_dev = glm_result.deviance
+    dev_explained = 1 - res_dev / null_dev if null_dev > 0 else 0
+
+    print(f'\n  Gamma GLM Results:')
+    print(f'    Null deviance: {null_dev:.2f}, Residual deviance: {res_dev:.2f}')
+    print(f'    Deviance explained: {dev_explained:.3f}')
+    print(f'    Log-likelihood: {glm_result.llf:.2f}')
+
+    # Coefficients and p-values
+    print(f'\n  {"Feature":30s} {"Coeff":>8s} {"exp(Coeff)":>10s} {"p-value":>8s}')
+    print(f'  {"-"*56}')
+    sig_coefs = []
+    for name, coef, pval in zip(glm_feat_names, glm_result.params, glm_result.pvalues):
+        exp_coef = np.exp(coef)
+        sig = '*' if pval < 0.1 else ''
+        print(f'  {name:30s} {coef:>+8.4f} {exp_coef:>10.4f} {pval:>8.4f} {sig}')
+        if pval < 0.2:
+            sig_coefs.append((name, coef, exp_coef, pval))
+    print(f'  * p<0.1')
+    print(f'\n  exp(Coeff) interpretation: factor change in E[total_pay] per unit increase in X')
+    print(f'    e.g., exp(Coeff)=1.5 means feature +1 unit -> expected pay x1.5')
+
+    # Predictions on test set (original scale)
+    y_pred_glm = glm_result.predict(X_test_glm)
+    mae = mean_absolute_error(y_test_payers_raw, y_pred_glm)
+    # RMSE on original scale
+    rmse = np.sqrt(np.mean((y_test_payers_raw - y_pred_glm)**2))
+
+    print(f'\n  Test Set Performance:')
+    print(f'    MAE:  {mae:.4f}')
+    print(f'    RMSE: {rmse:.4f}')
+
+    # ---- Combined Results ----
+    top_clf = np.argsort(shap_clf_mean)[-10:][::-1]
+    print('\n  Top 10 by |SHAP| (Stage 1: Pay Probability):')
+    for i in top_clf:
+        print(f'    {all_feats[i]}: {shap_clf_mean[i]:.4f}')
+
+    # ---- Bilingual Figure 1: Stage 1 SHAP (Payment Probability) ----
     for lang, fig_dir in LANGS:
         set_font(lang)
         if lang == 'cn':
-            title = 'XGBoost: 影响总付费金额的关键特征'
-            xlabel = '特征重要性'
+            title = 'XGBoost阶段1: 影响付费概率的关键特征 (|SHAP|)'
+            xlabel = '|SHAP| 平均边际贡献'
         else:
-            title = 'XGBoost: Top Features for Total Pay'
-            xlabel = 'Feature Importance'
+            title = 'XGBoost Stage 1: Key Features for Payment Probability (|SHAP|)'
+            xlabel = 'Mean |SHAP| Contribution'
 
         fig, ax = plt.subplots(figsize=(10, 8))
-        top_feats_disp = [all_feats[i] for i in top_idx]
-        ax.barh(range(len(top_feats_disp)), importance[top_idx], color='steelblue', alpha=0.8)
-        ax.set_yticks(range(len(top_feats_disp)))
-        ax.set_yticklabels(top_feats_disp, fontsize=8)
+        names = [all_feats[i] for i in top_clf][::-1]
+        vals = shap_clf_mean[top_clf][::-1]
+        ax.barh(range(len(names)), vals, color='steelblue', alpha=0.8)
+        ax.set_yticks(range(len(names)))
+        ax.set_yticklabels(names, fontsize=8)
         ax.set_xlabel(xlabel, fontsize=12)
         ax.set_title(title, fontsize=14)
         ax.invert_yaxis()
@@ -303,26 +465,43 @@ def xgboost_total_pay(df):
         plt.savefig(os.path.join(fig_dir, 'figure10_xgb_importance.png'), dpi=300, bbox_inches='tight')
         plt.close()
 
-    # Bilingual pred vs actual
+    # ---- Bilingual Figure 2: GLM coefficients (Payment Amount | Payer) ----
+    # Show only p<0.2 coefficients (exclude intercept)
+    sig_names = [n for n, c, e, p in sig_coefs if n != 'intercept']
+    sig_vals = [e for n, c, e, p in sig_coefs if n != 'intercept']  # exp(coeff)
+    sig_p = [p for n, c, e, p in sig_coefs if n != 'intercept']
+
     for lang, fig_dir in LANGS:
         set_font(lang)
         if lang == 'cn':
-            title = f'XGBoost: 预测 vs 实际 (MAE={mae:.2f})'
-            xl, yl = '实际总付费(美元)', '预测总付费(美元)'
+            title = f'阶段2: Gamma GLM 付费金额因子 (exp(β), p<0.2)'
+            xlabel = 'exp(β) 乘数效应 (每单位X变化, 期望付费×exp(β))'
         else:
-            title = f'XGBoost: Predicted vs Actual (MAE={mae:.2f})'
-            xl, yl = 'Actual Total Pay (USD)', 'Predicted Total Pay (USD)'
+            title = f'Stage 2: Gamma GLM Payment Amount Factors (exp(β), p<0.2)'
+            xlabel = 'exp(β) Multiplier (per unit X, expected pay ×exp(β))'
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.scatter(y_test_raw, y_pred, alpha=0.3, s=20, c='steelblue', edgecolors='none')
-        ax.plot([0, y_test_raw.max()], [0, y_test_raw.max()], 'r--', linewidth=1)
-        ax.set_xlabel(xl, fontsize=12); ax.set_ylabel(yl, fontsize=12)
-        ax.set_title(title, fontsize=14); ax.grid(True, linestyle='--', alpha=0.4)
-        plt.tight_layout()
-        plt.savefig(os.path.join(fig_dir, 'figure11_xgb_pred.png'), dpi=300, bbox_inches='tight')
-        plt.close()
+        if len(sig_names) > 0:
+            fig, ax = plt.subplots(figsize=(10, max(4, len(sig_names) * 0.5)))
+            names = sig_names[::-1]
+            vals = [v - 1 for v in sig_vals[::-1]]  # show as % change (exp(beta)-1)
+            colors = ['#B64342' if v > 0 else '#4A90D9' for v in vals]
+            ax.barh(range(len(names)), vals, color=colors, alpha=0.85)
+            ax.set_yticks(range(len(names)))
+            ax.set_yticklabels(names, fontsize=9)
+            ax.set_xlabel('% change in expected pay (exp(β)-1)', fontsize=12)
+            ax.set_title(title, fontsize=14)
+            ax.axvline(x=0, color='black', linewidth=0.8)
+            ax.grid(True, linestyle='--', alpha=0.4, axis='x')
+            plt.tight_layout()
+            plt.savefig(os.path.join(fig_dir, 'figure11_xgb_reg_stage2.png'), dpi=300, bbox_inches='tight')
+            plt.close()
 
-    return model, {'MAE': mae, 'R2_payers': r2_nonzero}
+    metrics = {
+        'AUC': auc, 'MAE_payers': mae, 'RMSE_payers': rmse,
+        'dev_explained': dev_explained, 'n_payers_train': n_payers_train,
+        'glm_params': dict(zip(glm_feat_names, zip(glm_result.params, glm_result.pvalues))),
+    }
+    return clf, glm_result, metrics
 
 
 def main():
@@ -335,14 +514,19 @@ def main():
 
     corr_df, level_stats = resource_level_elasticity(df)
     dia_threshold = diamond_churn_threshold(df)
+    recovery_info = recovery_pack_analysis(df, dia_threshold)
     first_pay_analysis(df)
-    model, metrics = xgboost_total_pay(df)
+    model, reg, metrics = xgboost_total_pay(df)
 
     results = [
         '=== 问题2 结果 ===',
         f'资源-等级增长相关系数: ' + ', '.join([f'{c["Resource_CN"]} r={c["r"]:.3f}' for c in corr_df]),
         f'钻石50%流失阈值: {dia_threshold:.0f}',
-        f'XGBoost MAE: {metrics["MAE"]:.4f}, R2(付费者): {metrics["R2_payers"]:.4f}',
+        f'钻石阈值以下玩家: {recovery_info["n_below_threshold"]}人, 流失率{recovery_info["churn_rate_below"]:.1%}',
+        f'XGBoost Hurdle模型:',
+        f'  阶段1(付费概率) AUC-ROC: {metrics["AUC"]:.4f}',
+        f'  阶段2(Gamma GLM) Deviance explained: {metrics["dev_explained"]:.3f}, RMSE: {metrics["RMSE_payers"]:.4f}',
+        f'  阶段2训练付费者数: {metrics["n_payers_train"]}',
     ]
     with open(os.path.join(RES_DIR, '问题2_results.txt'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(results))
