@@ -144,7 +144,7 @@ P(\text{流失} \mid \text{钻石}) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \cdot 
 
 \subsubsection{模型建立}
 
-题目要求建立回归模型分析影响"总付费金额"的关键因子。直接对全体玩家做回归面临零膨胀问题——96.2\%的玩家付费为0，模型将被零值主导。针对这一数据结构，采用两阶段Hurdle模型（Belotti et al., 2015）\cite{belotti2015twopm}：
+题目要求建立回归模型分析影响"总付费金额"的关键因子。直接对全体玩家做回归面临零膨胀问题——96.2\%的玩家付费为0，模型将被零值主导。针对这一数据结构，采用两阶段Hurdle模型\cite{belotti2015twopm}：
 
 \begin{enumerate}
     \item \textbf{阶段1（参与方程）：}XGBoost二分类，目标$y_1 = \mathbb{I}(\text{total\_pay} > 0)$，全量2000名玩家参与训练。设置$\text{scale\_pos\_weight}=25.4$平衡正负类权重，分层抽样保持训练/测试集正类比例一致。
