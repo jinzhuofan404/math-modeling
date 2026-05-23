@@ -429,24 +429,25 @@ def fig8_first_pay(df):
     payers = df[df['is_paying']==1].copy()
     if len(payers) == 0:
         return
-    payers['pg'] = pd.cut(payers['total_pay'], bins=[0,6,30,100,500], labels=['<$6','$6-30','$30-100','$100+'])
+    payers['total_pay_cny'] = payers['total_pay'] * 6  # USD → CNY
+    payers['pg'] = pd.cut(payers['total_pay_cny'], bins=[0,36,180,600,3000], labels=['<36元','36-180元','180-600元','600+元'])
     groups = payers.groupby('pg')['lifecycle_days'].agg(['mean','std','count']).reset_index()
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
         if lang == 'cn':
             t1, t2 = '付费金额分布', '付费水平与生命周期关系'
-            x1, y1 = '总付费(美元)', '玩家数'
-            x2, y2 = '付费分组', '平均生命周期(天)'
-            group_labels = ['<6元', '6-30元', '30-100元', '100+元']
+            x1, y1 = '总付费(元)', '玩家数'
+            x2, y2 = '付费分组(元)', '平均生命周期(天)'
+            group_labels = ['<36元', '36-180元', '180-600元', '600+元']
         else:
             t1, t2 = 'Payment Distribution', 'Payment Level vs Lifecycle'
-            x1, y1 = 'Total Pay (USD)', 'Number of Players'
-            x2, y2 = 'Payment Group', 'Mean Lifecycle (days)'
-            group_labels = ['<$6', '$6-30', '$30-100', '$100+']
+            x1, y1 = 'Total Pay (CNY)', 'Number of Players'
+            x2, y2 = 'Payment Group (CNY)', 'Mean Lifecycle (days)'
+            group_labels = ['<¥36', '¥36-180', '¥180-600', '¥600+']
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3.0))
-        ax1.hist(payers['total_pay'].clip(upper=100), bins=25, color=PAL["blue"], alpha=0.85,
+        ax1.hist(payers['total_pay_cny'].clip(upper=600), bins=25, color=PAL["blue"], alpha=0.85,
                 edgecolor='white', linewidth=0.3)
         ax1.set_title(t1, fontsize=7.5, fontweight='bold'); ax1.set_xlabel(x1); ax1.set_ylabel(y1)
         ax1.grid(True, linestyle='--', alpha=0.3, linewidth=0.3, axis='y')
@@ -527,9 +528,9 @@ def fig10_monte_carlo(df):
     """Problem 3: Three-scheme MC comparison (baseline / conservative / exploration)."""
     # Final 5000-MC results (hardcoded from _final_run.py)
     schemes = [
-        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 5605,  'ret': 7.1},
-        {'name_cn': '保守\n(主方案)',   'name_en': 'Conservative\n(Main)', 'rev': 26270, 'ret': 7.2},
-        {'name_cn': '探索\n(混合v5)',   'name_en': 'Exploration\n(Hybrid)', 'rev': 25681, 'ret': 10.0},
+        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 33839,  'ret': 7.1},
+        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 54308, 'ret': 7.2},
+        {'name_cn': '优化\n(混合)',   'name_en': 'Optimization\n(Hybrid)', 'rev': 53608, 'ret': 10.0},
     ]
     colors = [PAL["neutral_dark"], PAL["blue"], PAL["green_dark"]]
     target_rev, target_ret = 70000, 10.0
