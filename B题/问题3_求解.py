@@ -226,6 +226,94 @@ def player_clustering(df):
     return cluster_profiles, df
 
 
+def train_day3_classifier(df, cluster_profiles):
+    """Train Day1-3 classifier to predict full-period cluster labels (Teacher-Student).
+
+    Teacher: full-period K-Means cluster labels (ground truth)
+    Student: XGBoost multi-class classifier using only Day1-3 features
+    """
+    print('\n' + '=' * 50)
+    print('3.2 Early Deployable Segmentation (Teacher-Student)')
+    print('=' * 50)
+
+    # Load Day1-3 features
+    day3_path = os.path.join(DATA_DIR, 'player_features_day3.csv')
+    if not os.path.exists(day3_path):
+        print(f'  Day3 feature table not found: {day3_path}. Skipping.')
+        return None, None
+
+    df_day3 = pd.read_csv(day3_path)
+
+    # Day1-3 features for the student classifier
+    student_feats = [
+        'days_logged_d3', 'level_d3', 'level_change_d3', 'avg_duration_d3',
+        'food_reduce_d3', 'wood_reduce_d3', 'stone_reduce_d3',
+        'diamond_reduce_d3', 'coins_reduce_d3',
+        'diamond_d3', 'gold_d3',
+        'is_pay_d3', 'is_league_d3', 'n_event_types_d3',
+    ]
+
+    # Ensure all features present; fall back to available columns
+    missing = [f for f in student_feats if f not in df_day3.columns]
+    if missing:
+        print(f'  Missing Day3 features: {missing}')
+        student_feats = [f for f in student_feats if f in df_day3.columns]
+
+    if len(student_feats) == 0:
+        print('  No valid Day3 features found.')
+        return None, None
+
+    # Merge cluster labels from full-period df
+    label_map = df[['account_id', 'cluster']].copy()
+    df_day3_m = df_day3.merge(label_map, on='account_id', how='inner')
+
+    if len(df_day3_m) == 0:
+        print('  No matching account_ids between Day3 and full-period tables.')
+        return None, None
+
+    X_student = df_day3_m[student_feats].fillna(0)
+    y_student = df_day3_m['cluster'].values
+
+    from xgboost import XGBClassifier
+    from sklearn.model_selection import cross_val_score, StratifiedKFold
+    from sklearn.metrics import classification_report
+
+    # Cross-validate
+    clf = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.1,
+                        subsample=0.8, random_state=RANDOM_SEED, verbosity=0)
+
+    n_classes = len(np.unique(y_student))
+    n_splits = min(5, min(np.bincount(y_student)))
+    if n_splits >= 2:
+        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
+        cv_scores = cross_val_score(clf, X_student, y_student, cv=cv, scoring='accuracy')
+        print(f'  Student classifier: CV accuracy = {cv_scores.mean():.3f} (+/-{cv_scores.std():.3f})')
+    else:
+        print('  Not enough samples per class for CV.')
+        cv_scores = None
+
+    # Fit on full data
+    clf.fit(X_student, y_student)
+
+    # Per-class F1
+    y_pred = clf.predict(X_student)
+    target_names = [cp['name_cn'] for cp in sorted(cluster_profiles, key=lambda x: x['cluster'])]
+    # Truncate target_names to actual classes present
+    unique_classes = sorted(np.unique(y_student))
+    used_names = [target_names[i] if i < len(target_names) else f'Cluster{i}' for i in unique_classes]
+    print(f'\n  Classification Report (on full Day3 data):')
+    print(classification_report(y_student, y_pred, target_names=used_names, digits=3, zero_division=0))
+
+    # Feature importance
+    feat_imp = pd.DataFrame({'feature': student_feats, 'importance': clf.feature_importances_})
+    feat_imp = feat_imp.sort_values('importance', ascending=False)
+    print(f'\n  Top-5 Day3 features for cluster prediction:')
+    for _, row in feat_imp.head(5).iterrows():
+        print(f'    {row["feature"]}: {row["importance"]:.4f}')
+
+    return clf, student_feats
+
+
 def estimate_demand_curves(cluster_profiles, df):
     """Estimate demand curves: shared beta, stratified alpha_c."""
     print('\n' + '=' * 50)
@@ -624,6 +712,9 @@ def main():
     print(f'Loaded {len(df)} players')
 
     cluster_profiles, df = player_clustering(df)
+
+    # Early deployable segmentation (Teacher-Student)
+    day3_classifier, day3_feats = train_day3_classifier(df, cluster_profiles)
 
     # Demand curves
     demand, beta_hat = estimate_demand_curves(cluster_profiles, df)
