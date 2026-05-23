@@ -436,7 +436,7 @@ def xgboost_total_pay(df):
     print(f'    RMSE: {rmse:.4f}')
 
     # ---- Combined Results ----
-    top_clf = np.argsort(shap_clf_mean)[-10:][::-1]
+    top_clf = np.argsort(shap_clf_mean)[::-1]  # all features, ascending |SHAP|
     print('\n  Top 10 by |SHAP| (Stage 1: Pay Probability):')
     for i in top_clf:
         print(f'    {all_feats[i]}: {shap_clf_mean[i]:.4f}')
@@ -445,18 +445,18 @@ def xgboost_total_pay(df):
     for lang, fig_dir in LANGS:
         set_font(lang)
         if lang == 'cn':
-            title = 'XGBoost阶段1: 影响付费概率的关键特征 (|SHAP|)'
+            title = 'XGBoost阶段1: 影响付费概率的全部特征 (|SHAP|)'
             xlabel = '|SHAP| 平均边际贡献'
         else:
-            title = 'XGBoost Stage 1: Key Features for Payment Probability (|SHAP|)'
+            title = 'XGBoost Stage 1: All Features for Payment Probability (|SHAP|)'
             xlabel = 'Mean |SHAP| Contribution'
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(10, 11))
         names = [all_feats[i] for i in top_clf][::-1]
         vals = shap_clf_mean[top_clf][::-1]
         ax.barh(range(len(names)), vals, color='steelblue', alpha=0.8)
         ax.set_yticks(range(len(names)))
-        ax.set_yticklabels(names, fontsize=8)
+        ax.set_yticklabels(names, fontsize=7)
         ax.set_xlabel(xlabel, fontsize=12)
         ax.set_title(title, fontsize=14)
         ax.invert_yaxis()

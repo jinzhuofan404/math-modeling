@@ -4,7 +4,7 @@
 
 原始数据由两类文件组成：pickdata1（资源变更记录，33字段）和pickdata2（用户行为事件记录，52字段）。由于数据量庞大（总计约600万行），采用分块读取策略（chunksize=200,000）进行处理。
 
-\textbf{特征窗口约束。}问题1要求基于前3天行为预测30天留存，因此严格限定仅使用第1--3天的数据。Day1定义为玩家注册日期（register\_time），若缺失则以首次pickdata2记录日期替代。提取的15个前3天特征包括：登录天数（days\_logged\_d3）、第3天等级（level\_d3）、等级变化（level\_change\_d3）、日均在线时长（avg\_duration\_d3）、各类资源消耗量（food/wood/stone/diamond/coins\_reduce\_d3）、第3天钻石余额（diamond\_d3）与金币余额（gold\_d3）、是否首充（is\_pay\_d3，由first\_pay\_time $\leq$ Day3判定）、是否入盟（is\_league\_d3）及事件类型数（n\_event\_types\_d3）。\textbf{绝对排除}以下全周期变量以避免未来信息泄漏：lifecycle\_days、level\_end、total\_pay、vip\_level\_max、total\_records、diamond\_median。
+\textbf{特征窗口约束。}问题1要求基于前3天行为预测30天留存，因此严格限定仅使用第1--3天的数据。Day1定义为玩家注册日期（register\_time），若缺失则以首次pickdata2记录日期替代。提取的14个前3天特征包括：登录天数（days\_logged\_d3）、第3天等级（level\_d3）、等级变化（level\_change\_d3）、日均在线时长（avg\_duration\_d3）、各类资源消耗量（food/wood/stone/diamond/coins\_reduce\_d3）、第3天钻石余额（diamond\_d3）与金币余额（gold\_d3）、是否首充（is\_pay\_d3，由first\_pay\_time $\leq$ Day3判定）、是否入盟（is\_league\_d3）及事件类型数（n\_event\_types\_d3）。\textbf{绝对排除}以下全周期变量以避免未来信息泄漏：lifecycle\_days、level\_end、total\_pay、vip\_level\_max、total\_records、diamond\_median。
 
 \subsection{Kaplan-Meier留存率分析}
 
@@ -103,7 +103,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 
 其中$h_0(t)$为基准风险函数，$X = (X_1, \ldots, X_k)$为协变量向量，$\beta_k$为回归系数。$\exp(\beta_k) > 1$表示该特征增加流失风险（``风险因子''），$\exp(\beta_k) < 1$表示该特征降低流失风险（``保护因子''）。
 
-选取14个严格限定于前3天的特征：登录天数、第3天等级、等级变化、日均在线时长、各类资源消耗量、钻石/金币余额、是否首充、是否入盟及事件类型数。与前一版本使用的全周期特征形成对比，修复了信息泄漏问题。
+选取14个严格限定于前3天的特征：登录天数、第3天等级、等级变化、日均在线时长、各类资源消耗量、钻石/金币余额、是否首充、是否入盟及事件类型数。\textbf{绝对排除}全周期变量（lifecycle\_days、level\_end、total\_pay等），避免预测目标与特征共享未来信息——若使用全周期特征，C-index将被人为拉升至0.9479，产生虚假的高预测精度，本文报告的0.8986是模型真实泛化能力的下限估计。
 
 \subsubsection{模型训练与评估}
 
@@ -128,13 +128,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
         \item 登录天数（days\_logged\_d3）：$\beta = -0.17$，$p < 0.001$\\
         前3天每日登录的玩家具有显著更高的留存概率
     \end{itemize}
-    \item \textbf{最强风险因子}（$\exp(\beta) > 1$，增加流失风险）：
-    \begin{itemize}
-        \item 金币余额（gold\_d3）：$\beta = +0.08$，$p = 0.01$\\
-        金币是基础货币，存量高可能说明玩家尚未找到有效的资源消耗出口
-        \item 矿石消耗量（stone\_reduce\_d3）：$\beta = +0.02$，$p = 0.81$（不显著）
-    \end{itemize}
-    值得注意的是，若使用全周期特征（如level\_end、total\_pay等），C-index将被人为拉升至0.9479——因为预测目标与特征共享了未来信息。本文采用严格的前3天数据窗口，排除了此类信息泄漏，所报告的0.8986是模型真实预测能力的下限估计。
+    \item \textbf{风险因子：}模型中唯一达到统计显著的风险因子为金币余额（gold\_d3，$\beta = +0.08$，$p = 0.01$），提示前3天金币存量偏高可能意味着玩家尚未找到有效的资源消耗出口，间接增加了流失风险。其余特征的风险效应均不显著，模型的流失预测主要依靠保护因子的强度。
 \end{itemize}
 
 \begin{figure}[H]
@@ -149,6 +143,6 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.65\textwidth]{fig12_cox_pred}
-\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.95, MAE=5.03天）}
+\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.899, MAE=1.33天）}
 \label{fig:p1_pred}
 \end{figure}

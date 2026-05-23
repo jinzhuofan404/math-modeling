@@ -500,19 +500,19 @@ def fig9_xgb_importance(df):
     explainer1 = shap.TreeExplainer(clf)
     shap1 = explainer1.shap_values(X1)
     shap1_mean = np.abs(shap1).mean(axis=0)
-    ti1 = np.argsort(shap1_mean)[-12:][::-1]
+    ti1 = np.argsort(shap1_mean)[::-1]  # all features, ascending |SHAP|
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
-        title = '阶段1: 付费概率驱动因子 (|SHAP|)' if lang=='cn' else 'Stage 1: Drivers of Payment Probability (|SHAP|)'
+        title = '阶段1: 付费概率驱动因子 (|SHAP|, 全部特征)' if lang=='cn' else 'Stage 1: Drivers of Payment Probability (|SHAP|, all features)'
         xlabel = '平均|SHAP值|' if lang=='cn' else 'Mean |SHAP| Value'
-        fig, ax = plt.subplots(figsize=(5, 3.5))
+        fig, ax = plt.subplots(figsize=(5, 6.5))
         names = []
         for f in [all_f[i] for i in ti1][::-1]:
             names.append(fn_cn.get(f, f) if lang=='cn' else fn_en.get(f, f))
         vals = shap1_mean[ti1][::-1]
         ax.barh(range(len(names)), vals, color=PAL["blue"], alpha=0.85, height=0.65)
-        ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=6)
+        ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=5.5)
         ax.set_xlabel(xlabel, fontsize=7)
         ax.set_title(title, fontsize=7.5, fontweight='bold')
         ax.grid(True, linestyle='--', alpha=0.25, linewidth=0.3, axis='x')
