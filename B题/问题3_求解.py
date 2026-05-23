@@ -90,7 +90,7 @@ def player_clustering(df):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df_cluster)
 
-    K_range = range(2, 8)
+    K_range = range(6, 7)  # force K=6 for stable cluster naming
     inertias, silhouettes = [], []
     for k in K_range:
         km = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
@@ -269,6 +269,7 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
             for _ in range(n_players):
                 lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
                 organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < base_pay_prob else 0
+                organic_pay *= 6  # USD → CNY
                 strategy_rev, strategy_ret_boost = 0, 0
                 for gp in gift_packs:
                     if np.random.random() < max(0.0005, base_pay_prob * gp['prob_mult']):
@@ -403,6 +404,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
                 for _ in range(n_players):
                     lifecycle = max(1, np.random.normal(cd['lifecycle_mean'], cd['lifecycle_std']))
                     organic_pay = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
+                    organic_pay *= 6  # USD → CNY
                     strategy_rev, n_pushes, total_price = 0, 0, 0
                     highest_paid = 0
                     total_ret_boost = 0.0
@@ -523,6 +525,7 @@ def monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists):
             cd = cl_dists[c]
             for _ in range(n):
                 op = np.random.exponential(cd['mean_pay']) if np.random.random() < cd['pay_rate'] else 0
+                op *= 6  # USD → CNY
                 tr += op
                 if np.random.random() < cd['retention_base']:
                     ret += 1
