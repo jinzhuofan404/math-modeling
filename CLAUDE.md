@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 建模分析 | 已完成 | `B题_题目分析报告.md`, `B题_术语表格.md` |
 | 代码实现 | 已完成 | `B题/特征工程.py`, `问题1-4_求解.py` |
 | Nature图表 | 已完成 | 15图×2语言×4格式(SVG/PDF/TIFF/PNG) |
-| LaTeX论文 | 已完成 | `论文/main.pdf` 28页（正文24页） |
-| 论文修订 | 已完成 | 摘要重写、引用改中括号、排版压缩、附录补充 |
+| LaTeX论文 | 已完成 | `论文/main.pdf` 30页 |
+| 论文修订 | 已完成 | 五改进：统一标签+PH诊断+RSF+Bootstrap+K=4+早期分群 |
 
 ## 题目结构
 
@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 付费金额 → pickdata2的`total_pay`（以USD标价，论文统一按1 USD ≈ 6 CNY折算）
 - 资源消耗 → pickdata1的`change_type='reduce'`记录
 - 联盟状态 → pickdata1的`league_name`非空
-- 流失判定 → 连续2天无pickdata2行为记录
+- 流失判定 → 全篇统一为`lifecycle_days < 30`（活跃跨度不足30天），问题1标签为`duration = min(lifecycle_days, 30)`, `event = (lifecycle_days < 30)`
 
 ## 项目结构
 
@@ -92,21 +92,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 指标 | 数值 |
 |------|------|
-| 次日/7日/14日/30日留存 | 33.55% / 6.30% / 2.65% / 0.85% |
+| 次日/7日/14日/30日留存 | 42.30% / 22.95% / 16.10% / 7.05% |
 | 中位生存时间 | 1天 |
 | 付费用户占比 | 3.75% (75/2000) |
-| 付费者7日留存 | 40.6% (vs 非付费5.2%) |
-| 入盟者7日留存 | 28.0% (vs 未入盟1.2%) |
-| 钻石流失风险阈值 | 566 |
-| Cox C-index | 0.899 |
-| Cox MAE | 1.33天 |
-| 最优聚类数 | K=6 (轮廓系数0.490) |
-| Hurdle阶段1 AUC | 0.9315 |
+| 付费者7日留存 | 68.0% (vs 非付费21.2%) |
+| 入盟者7日留存 | 61.5% (vs 未入盟13.4%) |
+| 钻石流失风险阈值 | 566 (Bootstrap 95% CI: [497, 644]) |
+| Cox C-index | 0.826 |
+| Cox MAE | 4.36天 |
+| RSF C-index | 0.768 |
+| PH违背协变量 | days_logged_d3 (p=0.0001), n_event_types_d3 (p=0.014) |
+| 最优聚类数 | K=4 (Silhouette=0.478, CH=1039.8, DB=1.004) |
+| 早期分群CV准确率 | 92.2% (Day3 XGBoost → 全周期聚类标签) |
+| Hurdle阶段1 AUC | 0.9315 (Bootstrap 95% CI: [0.919, 0.991]) |
 | Hurdle阶段2 Deviance explained | 0.839 |
-| 优化方案期望营收 | 71,045元 (10K玩家) |
-| 优化方案留存率 | 11.3% |
-| P(营收≥70,000) | 52.4% |
-| P(留存≥10%) | 98% |
+| 优化方案期望营收 | 63,043元 (10K玩家, K=4) |
+| 优化方案留存率 | 8.5% |
+| P(营收≥70,000) | 0.2% (K=4稳定性约束下) |
 
 ## Git工作流
 
