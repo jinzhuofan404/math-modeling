@@ -20,7 +20,7 @@ T_i = \min(\text{lifecycle\_days}_i,\ 30),\quad \delta_i = \mathbb{I}(\text{life
 \hat{S}(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)
 \end{equation}
 
-其中$d_i$为$t_i$时刻流失的玩家数，$n_i$为$t_i$时刻仍在风险集中的玩家数。该估计量允许数据存在右删失（即在观察期结束时仍未流失的玩家）。
+其中$d_i$为$t_i$时刻流失的玩家数，$n_i$为$t_i$时刻仍在风险集中的玩家数。该估计量允许数据存在右删失。
 
 \subsubsection{结果分析}
 
@@ -38,7 +38,7 @@ KM留存曲线如图\ref{fig:p1_km}所示。计算得到各级留存率如下：
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.7\textwidth]{fig1_km_curve}
-\caption{Kaplan-Meier玩家留存曲线（垂直虚线标注关键时间节点及对应留存率）}
+\caption{Kaplan-Meier玩家留存曲线}
 \label{fig:p1_km}
 \end{figure}
 
@@ -126,7 +126,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 图\ref{fig:p1_cox}展示了各特征的回归系数及其95\%置信区间。主要发现：
 
 \begin{itemize}
-    \item \textbf{最强保护因子}（$\exp(\beta) < 1$，降低流失风险）：
+    \item \textbf{最强保护因子}（$\exp(\beta) < 1$）：
     \begin{itemize}
         \item 事件类型数（n\_event\_types\_d3）：$\beta = -0.43$，$p < 0.001$\\
         前3天内参与的游戏活动种类越多，流失风险越低——行为多样性是留存的最强信号
@@ -141,7 +141,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{fig4_cox_coef}
-\caption{Cox模型各特征对流失风险的影响（红色=风险因子，蓝色=保护因子）}
+\caption{Cox模型各特征对流失风险的影响}
 \label{fig:p1_cox}
 \end{figure}
 
@@ -150,7 +150,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{fig12_cox_pred}
-\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.826, MAE=4.36天）}
+\caption{Cox模型预测生存天数 vs 实际生存天数}
 \label{fig:p1_pred}
 \end{figure}
 
