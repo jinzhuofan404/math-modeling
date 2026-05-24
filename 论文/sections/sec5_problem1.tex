@@ -114,15 +114,7 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
     \item 预测平均绝对误差（MAE）：\textbf{4.36天}
 \end{itemize}
 
-\subsubsection{比例风险假设诊断}
-
-Cox模型的前提假设是各协变量的风险比不随时间变化（Proportional Hazards假设）。对拟合后的模型进行PH假设检验（Schoenfeld残差检验），结果显示：\texttt{days\_logged\_d3}（$p=0.0001$）和\texttt{n\_event\_types\_d3}（$p=0.014$）两个协变量显著违背PH假设，其余12个协变量满足PH假设。图\ref{fig:p1_schoenfeld}展示了违背最严重的协变量的Schoenfeld残差图。
-
-PH假设的部分违背提示：登录天数和事件类型数对流失风险的影响可能在早期和晚期有所不同——前3天每天都登录的玩家在短期内的保护效应最强，随时间推移该效应递减。本文保留Cox模型并报告PH诊断结果，原因如下：（1）C-index=0.826表明模型整体排序能力良好；（2）Cox的系数解释性远优于纯非参数替代方案；（3）下文的RSF对照进一步验证了这一选择。
-
-\subsubsection{随机生存森林对照}
-
-为评估模型选择对预测性能的影响，以随机生存森林（Random Survival Forest, RSF）\cite{ishwaran2008}作为非参数对照模型。RSF不依赖于PH假设，通过集成100棵生存树进行预测。在相同训练/测试划分下，RSF取得C-index=\textbf{0.768}，低于Cox的0.826。这一结果并不意外——RSF的完全非参数特性在样本量有限（2000人）时容易过拟合，而Cox的半参数结构在偏差-方差权衡中更优。鉴于Cox在预测力和解释性上的双重优势，本文以Cox为主模型，RSF为对照。
+\textbf{比例风险假设诊断与模型对照。}显示2个协变量存在时间效应递减（\texttt{days\_logged\_d3}, $p{=}0.0001$; \texttt{n\_event\_types\_d3}, $p{=}0.014$），其余12个满足PH假设（图\ref{fig:p1_schoenfeld}）。本文保留Cox模型——其C-index=0.826排序能力良好且系数解释性优于非参数替代。以随机生存森林（RSF）\cite{ishwaran2008}作对照：RSF的C-index=0.768，低于Cox。在有限样本下Cox的半参数结构具有偏差--方差权衡优势，本文以Cox为主模型、RSF为对照。
 
 \subsubsection{特征重要性分析}
 
