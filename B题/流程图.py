@@ -1,19 +1,20 @@
 """
 Generate overall modeling flowchart for the paper (Nature style).
+Clean layout with large fonts, no overlapping.
 """
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import os, numpy as np
+import os
 
 # ── Nature palette ──
 BLUE   = '#0F4D92'
-GREEN  = '#8BCF8B'
+GREEN  = '#5A9E6F'
 RED    = '#B64342'
 ORANGE = '#E8923F'
 PURPLE = '#7B5EA7'
-GRAY   = '#6B6B6B'
+GRAY   = '#888888'
 DARK   = '#2C2C2C'
 WHITE  = '#FFFFFF'
 BG     = '#FAFAFA'
@@ -30,207 +31,172 @@ def set_font(lang):
         plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'SimHei', 'Microsoft YaHei']
     plt.rcParams['axes.unicode_minus'] = False
 
-def draw_rounded_box(ax, x, y, w, h, text, color, fontsize=9, text_color='white', bold=False):
-    """Draw a rounded rectangle with centered text."""
-    rect = mpatches.FancyBboxPatch(
+def box(ax, x, y, w, h, text, color, fs=11, tc=WHITE, bold=False):
+    """Draw a rounded box with text."""
+    r = mpatches.FancyBboxPatch(
         (x - w/2, y - h/2), w, h,
-        boxstyle="round,pad=0.15", facecolor=color, edgecolor='white', linewidth=1.2, alpha=0.92
+        boxstyle="round,pad=0.2", facecolor=color, edgecolor='none', alpha=0.92, zorder=2
     )
-    ax.add_patch(rect)
-    weight = 'bold' if bold else 'normal'
-    ax.text(x, y, text, ha='center', va='center', fontsize=fontsize,
-            color=text_color, fontweight=weight)
+    ax.add_patch(r)
+    ax.text(x, y, text, ha='center', va='center', fontsize=fs,
+            color=tc, fontweight='bold' if bold else 'normal', zorder=3)
 
-def draw_arrow(ax, x1, y1, x2, y2, color=GRAY, lw=1.5):
-    """Draw an arrow from (x1,y1) to (x2,y2)."""
-    ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
-                arrowprops=dict(arrowstyle='->', color=color, lw=lw,
-                               connectionstyle='arc3,rad=0'))
-
-def draw_label(ax, x, y, text, color=DARK, fontsize=7.5, rotation=0):
-    """Draw a small text label."""
-    ax.text(x, y, text, ha='center', va='center', fontsize=fontsize,
-            color=color, rotation=rotation)
+def arrow(ax, x1, y1, x2, y2, color=GRAY, lw=2):
+    ax.annotate('', xy=(x2, y2), xytext=(x1, y1), zorder=1,
+                arrowprops=dict(arrowstyle='->', color=color, lw=lw, connectionstyle='arc3,rad=0'))
 
 def draw_flowchart(lang='cn'):
-    """Draw the full modeling pipeline flowchart."""
-    fig, ax = plt.subplots(1, 1, figsize=(14, 9))
+    """Simpler top-down layout with more space."""
+    if lang == 'cn':
+        T = {
+            'title': '整体建模流程图',
+            'data': '原始数据\n资源变更记录 + 行为事件记录',
+            'fe': '特征工程',
+            'fe_left': 'Day1–3可部署特征\n(问题1预测用)',
+            'fe_right': '全周期解释特征\n(问题2/3分析用)',
+            'q1_title': '问题1：留存规律挖掘',
+            'q1_a': 'KM生存估计\n+ 风险率分析',
+            'q1_b': 'Cox比例风险模型\n(+ PH诊断 + RSF对照)',
+            'q1_c': '付费/入盟分层\n留存对比',
+            'q1_out': '→ 流失风险因子',
+            'q2_title': '问题2：付费关联分析',
+            'q2_a': '资源消耗与等级增长\nPearson相关分析',
+            'q2_b': '钻石流失阈值识别\n(Logistic回归, 阈值566)',
+            'q2_c': '两阶段Hurdle模型\n(XGBoost + Gamma GLM)',
+            'q2_out': '→ 付费驱动因子',
+            'q3_title': '问题3：差异化付费策略设计',
+            'q3_a': 'K-Means聚类分群\n(K=5, 稳定性约束)',
+            'q3_b': 'Uplift四象限框架\n+ 需求曲线估计',
+            'q3_c': '蒙特卡洛模拟验证\n(5000次 × 10000人)',
+            'q3_out': '→ 优化方案: 67,715元, 留存11.4%',
+            'q4_title': '问题4：数据采集与闭环验证',
+            'q4_a': '优先补采：社交行为数据 + 实时进度数据',
+            'q4_b': 'AB测试框架：实验组 vs 对照组, 30日ARPU+留存对比',
+        }
+    else:
+        T = {
+            'title': 'Overall Modeling Framework',
+            'data': 'Raw Data\nResource Logs + Behavior Events',
+            'fe': 'Feature Engineering',
+            'fe_left': 'Day 1–3 Deployable Features\n(for Q1 Prediction)',
+            'fe_right': 'Full-Period Explanatory Features\n(for Q2/Q3 Analysis)',
+            'q1_title': 'Q1: Retention Pattern Mining',
+            'q1_a': 'KM Survival Estimation\n+ Hazard Rate Analysis',
+            'q1_b': 'Cox Proportional Hazards\n(+ PH Diagnostics + RSF)',
+            'q1_c': 'Paid/League Segmented\nRetention Comparison',
+            'q1_out': '→ Churn Risk Factors',
+            'q2_title': 'Q2: Payment Correlation Analysis',
+            'q2_a': 'Resource–Level Growth\nPearson Correlation',
+            'q2_b': 'Diamond Churn Threshold\n(Logistic Regression, 566)',
+            'q2_c': 'Two-Part Hurdle Model\n(XGBoost + Gamma GLM)',
+            'q2_out': '→ Payment Drivers',
+            'q3_title': 'Q3: Differentiated Strategy Design',
+            'q3_a': 'K-Means Clustering\n(K=5, Stability Constraint)',
+            'q3_b': 'Uplift Four-Quadrant\n+ Demand Curve Estimation',
+            'q3_c': 'Monte Carlo Verification\n(5000 runs × 10000 players)',
+            'q3_out': '→ Optimal: 67,715 CNY, 11.4% Retention',
+            'q4_title': 'Q4: Data Collection & Closed-Loop',
+            'q4_a': 'Priority: Social Behavior + Real-Time Progress Data',
+            'q4_b': 'A/B Test: Treatment vs Control, 30-day ARPU + Retention',
+        }
+
+    fig, ax = plt.subplots(figsize=(14, 16))
     ax.set_xlim(0, 14)
-    ax.set_ylim(0, 9)
+    ax.set_ylim(0, 16)
     ax.axis('off')
     ax.set_facecolor(BG)
+    ax.text(7, 15.5, T['title'], ha='center', fontsize=18, fontweight='bold', color=DARK)
 
-    labels_cn = {
-        'title': '整体建模流程图',
-        'data': '原始数据\n资源变更 + 行为事件',
-        'fe': '特征工程',
-        'fe_d3': 'Day1–3\n可部署特征',
-        'fe_full': '全周期\n解释特征',
-        'q1': '问题1: 留存规律挖掘',
-        'q1_m1': 'KM生存估计',
-        'q1_m2': 'Cox PH\n(+ RSF对照)',
-        'q1_m3': '分层留存\n对比分析',
-        'q1_out': '流失风险因子',
-        'q2': '问题2: 付费关联分析',
-        'q2_m1': '资源–等级\n相关性',
-        'q2_m2': 'Logistic\n阈值识别',
-        'q2_m3': '两阶段\nHurdle模型',
-        'q2_out': '付费驱动因子',
-        'q3': '问题3: 差异化策略设计',
-        'q3_m1': 'K-Means\n聚类分群',
-        'q3_m2': 'Uplift\n四象限框架',
-        'q3_m3': '蒙特卡洛\n模拟验证',
-        'q4': '问题4: 数据采集与闭环',
-        'q4_m1': '社交 / 进度\n补采方向',
-        'q4_m2': 'A/B测试\n验证框架',
-        'legend': '图例:',
-        'leg_data': '数据层',
-        'leg_feat': '特征层',
-        'leg_model': '模型层',
-        'leg_strategy': '策略层',
-    }
-    labels_en = {
-        'title': 'Overall Modeling Framework',
-        'data': 'Raw Data\nResource Logs +\nBehavior Events',
-        'fe': 'Feature Engineering',
-        'fe_d3': 'Day 1–3\nDeployable\nFeatures',
-        'fe_full': 'Full-Period\nExplanatory\nFeatures',
-        'q1': 'Q1: Retention Analysis',
-        'q1_m1': 'KM Survival\nEstimation',
-        'q1_m2': 'Cox PH\n(+ RSF Baseline)',
-        'q1_m3': 'Segmented\nRetention',
-        'q1_out': 'Churn\nRisk Factors',
-        'q2': 'Q2: Payment Analysis',
-        'q2_m1': 'Resource–Level\nCorrelation',
-        'q2_m2': 'Logistic\nThreshold',
-        'q2_m3': 'Two-Part\nHurdle Model',
-        'q2_out': 'Payment\nDrivers',
-        'q3': 'Q3: Strategy Optimization',
-        'q3_m1': 'K-Means\nClustering',
-        'q3_m2': 'Uplift\nFour-Quadrant',
-        'q3_m3': 'Monte Carlo\nSimulation',
-        'q4': 'Q4: Data Collection & A/B Test',
-        'q4_m1': 'Social / Progress\nData Gaps',
-        'q4_m2': 'A/B Testing\nFramework',
-        'legend': 'Legend:',
-        'leg_data': 'Data',
-        'leg_feat': 'Feature',
-        'leg_model': 'Model',
-        'leg_strategy': 'Strategy',
-    }
-    L = labels_cn if lang == 'cn' else labels_en
+    y = 14.3
 
-    # ── Title ──
-    ax.text(7, 8.55, L['title'], ha='center', va='center', fontsize=16,
-            fontweight='bold', color=DARK)
+    # ── DATA ──
+    box(ax, 7, y, 8, 0.9, T['data'], BLUE, fs=11, bold=True)
+    arrow(ax, 7, y-0.45, 7, y-0.9, GRAY, lw=2)
+    y -= 1.15
 
-    # ═══ ROW 1: DATA ═══
-    draw_rounded_box(ax, 7, 7.4, 5.5, 1.1, L['data'], BLUE, fontsize=10, bold=True)
+    # ── FEATURE ENGINEERING ──
+    box(ax, 7, y, 5, 0.65, T['fe'], PURPLE, fs=11, bold=True)
+    arrow(ax, 5.5, y-0.33, 3, y-0.85, GRAY, lw=1.8)
+    arrow(ax, 8.5, y-0.33, 11, y-0.85, GRAY, lw=1.8)
+    box(ax, 3, y-1.15, 3.8, 0.6, T['fe_left'], PURPLE, fs=8.5)
+    box(ax, 11, y-1.15, 3.8, 0.6, T['fe_right'], PURPLE, fs=8.5)
+    y -= 1.8
 
-    # Arrow: data → feature engineering
-    draw_arrow(ax, 7, 6.82, 7, 6.45, GRAY)
+    # ── Q1 (left) + Q2 (right) ──
+    arrow(ax, 3, y+0.35, 3, y, GRAY)
+    arrow(ax, 11, y+0.35, 11, y, GRAY)
 
-    # ═══ ROW 2: FEATURE ENGINEERING ═══
-    draw_rounded_box(ax, 7, 6.1, 2.8, 0.7, L['fe'], PURPLE, fontsize=9, bold=True)
+    # Q1
+    box(ax, 3, y-0.5, 5, 0.65, T['q1_title'], RED, fs=11, bold=True)
+    box(ax, 3, y-1.4, 5, 0.5, T['q1_a'], RED, fs=8.5)
+    arrow(ax, 3, y-0.82, 3, y-1.15, GRAY, lw=1.2)
+    box(ax, 3, y-2.2, 5, 0.5, T['q1_b'], RED, fs=8.5)
+    arrow(ax, 3, y-1.65, 3, y-1.95, GRAY, lw=1.2)
+    box(ax, 3, y-3.0, 5, 0.5, T['q1_c'], RED, fs=8.5)
+    arrow(ax, 3, y-2.45, 3, y-2.75, GRAY, lw=1.2)
+    box(ax, 3, y-3.7, 5, 0.5, T['q1_out'], '#F0C0C0', fs=9, tc=DARK)
+    arrow(ax, 3, y-3.25, 3, y-3.45, GRAY, lw=1.2)
+    q1_bottom = y - 3.95
 
-    # Arrows: feature engineering → two feature tables
-    draw_arrow(ax, 5.6, 5.75, 2.3, 5.0, GRAY)
-    draw_arrow(ax, 8.4, 5.75, 11.7, 5.0, GRAY)
+    # Q2
+    box(ax, 11, y-0.5, 5, 0.65, T['q2_title'], ORANGE, fs=11, bold=True)
+    box(ax, 11, y-1.4, 5, 0.5, T['q2_a'], ORANGE, fs=8.5)
+    arrow(ax, 11, y-0.82, 11, y-1.15, GRAY, lw=1.2)
+    box(ax, 11, y-2.2, 5, 0.5, T['q2_b'], ORANGE, fs=8.5)
+    arrow(ax, 11, y-1.65, 11, y-1.95, GRAY, lw=1.2)
+    box(ax, 11, y-3.0, 5, 0.5, T['q2_c'], ORANGE, fs=8.5)
+    arrow(ax, 11, y-2.45, 11, y-2.75, GRAY, lw=1.2)
+    box(ax, 11, y-3.7, 5, 0.5, T['q2_out'], '#F5D0B0', fs=9, tc=DARK)
+    arrow(ax, 11, y-3.25, 11, y-3.45, GRAY, lw=1.2)
+    q2_bottom = y - 3.95
 
-    # Feature tables
-    draw_rounded_box(ax, 2.3, 4.65, 2.8, 0.7, L['fe_d3'], PURPLE, fontsize=7.5, text_color=WHITE)
-    draw_rounded_box(ax, 11.7, 4.65, 2.8, 0.7, L['fe_full'], PURPLE, fontsize=7.5, text_color=WHITE)
+    y = min(q1_bottom, q2_bottom)
 
-    # ═══ ROW 3: Q1 (left) + Q2 (right) ═══
-    # Arrows: feature tables → Q1 / Q2
-    draw_arrow(ax, 2.3, 4.3, 2.3, 3.9, GRAY)
-    draw_arrow(ax, 11.7, 4.3, 11.7, 3.9, GRAY)
+    # ── Merge Q1+Q2 → Q3 ──
+    arrow(ax, 3, y, 5.5, y-0.4, GRAY, lw=2)
+    arrow(ax, 11, y, 8.5, y-0.4, GRAY, lw=2)
+    y -= 0.7
 
-    # Q1 header
-    draw_rounded_box(ax, 2.3, 3.55, 3.8, 0.7, L['q1'], RED, fontsize=9, bold=True)
-    # Q1 methods
-    draw_rounded_box(ax, 0.6, 2.5, 1.6, 0.6, L['q1_m1'], RED, fontsize=6.5, text_color=WHITE)
-    draw_rounded_box(ax, 2.3, 2.5, 1.6, 0.6, L['q1_m2'], RED, fontsize=6.5, text_color=WHITE)
-    draw_rounded_box(ax, 1.45, 1.65, 3.0, 0.6, L['q1_m3'], RED, fontsize=6.5, text_color=WHITE)
-    # Q1 output
-    draw_rounded_box(ax, 1.45, 0.85, 3.0, 0.55, L['q1_out'], '#E8A0A0', fontsize=7.5, text_color=DARK, bold=True)
+    # ── Q3 ──
+    box(ax, 7, y-0.5, 10, 0.65, T['q3_title'], GREEN, fs=11, tc=DARK, bold=True)
+    box(ax, 3, y-1.4, 3.5, 0.5, T['q3_a'], GREEN, fs=8.5, tc=DARK)
+    box(ax, 7, y-1.4, 3.5, 0.5, T['q3_b'], GREEN, fs=8.5, tc=DARK)
+    box(ax, 11, y-1.4, 3.5, 0.5, T['q3_c'], GREEN, fs=8.5, tc=DARK)
+    arrow(ax, 7, y-0.82, 3, y-1.15, GRAY, lw=1.2)
+    arrow(ax, 7, y-0.82, 7, y-1.15, GRAY, lw=1.2)
+    arrow(ax, 7, y-0.82, 11, y-1.15, GRAY, lw=1.2)
+    box(ax, 7, y-2.1, 8, 0.5, T['q3_out'], '#C8E6C9', fs=9, tc=DARK)
+    arrow(ax, 3, y-1.65, 7, y-1.85, GRAY, lw=1.2)
+    arrow(ax, 7, y-1.65, 7, y-1.85, GRAY, lw=1.2)
+    arrow(ax, 11, y-1.65, 7, y-1.85, GRAY, lw=1.2)
+    y = y - 2.3
 
-    # Arrows Q1
-    draw_arrow(ax, 2.3, 3.2, 0.6, 2.8, GRAY, lw=1.2)
-    draw_arrow(ax, 2.3, 3.2, 2.3, 2.8, GRAY, lw=1.2)
-    draw_arrow(ax, 0.6, 2.2, 1.45, 1.95, GRAY, lw=1.2)
-    draw_arrow(ax, 2.3, 2.2, 1.45, 1.95, GRAY, lw=1.2)
-    draw_arrow(ax, 1.45, 1.35, 1.45, 1.15, GRAY, lw=1.2)
-
-    # Q2 header
-    draw_rounded_box(ax, 11.7, 3.55, 3.8, 0.7, L['q2'], ORANGE, fontsize=9, bold=True)
-    # Q2 methods
-    draw_rounded_box(ax, 10.0, 2.5, 1.6, 0.6, L['q2_m1'], ORANGE, fontsize=6.5, text_color=WHITE)
-    draw_rounded_box(ax, 11.7, 2.5, 1.6, 0.6, L['q2_m2'], ORANGE, fontsize=6.5, text_color=WHITE)
-    draw_rounded_box(ax, 13.4, 2.5, 1.6, 0.6, L['q2_m3'], ORANGE, fontsize=6.5, text_color=WHITE)
-    # Q2 output
-    draw_rounded_box(ax, 12.55, 0.85, 3.0, 0.55, L['q2_out'], '#F5C8A0', fontsize=7.5, text_color=DARK, bold=True)
-
-    # Arrows Q2
-    draw_arrow(ax, 11.7, 3.2, 10.0, 2.8, GRAY, lw=1.2)
-    draw_arrow(ax, 11.7, 3.2, 11.7, 2.8, GRAY, lw=1.2)
-    draw_arrow(ax, 11.7, 3.2, 13.4, 2.8, GRAY, lw=1.2)
-    draw_arrow(ax, 10.0, 2.2, 12.55, 1.15, GRAY, lw=1.2)
-    draw_arrow(ax, 11.7, 2.2, 12.55, 1.15, GRAY, lw=1.2)
-    draw_arrow(ax, 13.4, 2.2, 12.55, 1.15, GRAY, lw=1.2)
-
-    # ═══ ROW 3: Q3 (center, receives from Q1+Q2) ═══
-    # Arrows from Q1/Q2 to Q3
-    draw_arrow(ax, 2.3, 3.2, 5.5, 4.15, GRAY, lw=2)
-    draw_arrow(ax, 11.7, 3.2, 8.5, 4.15, GRAY, lw=2)
-
-    # Q3 header
-    draw_rounded_box(ax, 7, 4.55, 4.5, 0.75, L['q3'], GREEN, fontsize=9, text_color=DARK, bold=True)
-
-    # Q3 methods
-    draw_rounded_box(ax, 5.0, 3.55, 1.8, 0.6, L['q3_m1'], GREEN, fontsize=6.5, text_color=DARK)
-    draw_rounded_box(ax, 7.0, 3.55, 1.8, 0.6, L['q3_m2'], GREEN, fontsize=6.5, text_color=DARK)
-    draw_rounded_box(ax, 9.0, 3.55, 1.8, 0.6, L['q3_m3'], GREEN, fontsize=6.5, text_color=DARK)
-
-    # Arrows Q3
-    draw_arrow(ax, 7, 4.15, 5.0, 3.85, GRAY, lw=1.2)
-    draw_arrow(ax, 7, 4.15, 7.0, 3.85, GRAY, lw=1.2)
-    draw_arrow(ax, 7, 4.15, 9.0, 3.85, GRAY, lw=1.2)
-
-    # ═══ Q4 below Q3 ═══
-    draw_arrow(ax, 7, 3.25, 7, 2.95, GRAY, lw=1.5)
-
-    draw_rounded_box(ax, 7, 2.55, 4.5, 0.75, L['q4'], GRAY, fontsize=9, text_color=WHITE, bold=True)
-
-    # Q4 methods
-    draw_rounded_box(ax, 5.5, 1.6, 2.0, 0.55, L['q4_m1'], GRAY, fontsize=7, text_color=WHITE)
-    draw_rounded_box(ax, 8.5, 1.6, 2.0, 0.55, L['q4_m2'], GRAY, fontsize=7, text_color=WHITE)
-
-    draw_arrow(ax, 7, 2.15, 5.5, 1.9, GRAY, lw=1.2)
-    draw_arrow(ax, 7, 2.15, 8.5, 1.9, GRAY, lw=1.2)
-
-    # ═══ LEGEND ═══
-    lx, ly = 11.5, 8.3
-    ax.text(lx, ly, L['legend'], fontsize=6.5, color=DARK, fontweight='bold')
-    for i, (color, label_key) in enumerate([
-        (BLUE, 'leg_data'), (PURPLE, 'leg_feat'), (RED, 'leg_model'), (GREEN, 'leg_strategy')
-    ]):
-        y = ly - 0.25 * (i + 1)
-        ax.add_patch(mpatches.Rectangle((lx, y-0.08), 0.35, 0.16,
-                      facecolor=color, edgecolor='white', linewidth=0.5))
-        ax.text(lx + 0.5, y, L[label_key], fontsize=6, color=DARK, va='center')
+    # ── Q4 ──
+    arrow(ax, 7, y+0.2, 7, y-0.1, GRAY, lw=2)
+    box(ax, 7, y-0.6, 10, 0.65, T['q4_title'], GRAY, fs=11, bold=True)
+    box(ax, 4, y-1.4, 4.5, 0.5, T['q4_a'], GRAY, fs=8.5)
+    box(ax, 10, y-1.4, 4.5, 0.5, T['q4_b'], GRAY, fs=8.5)
+    arrow(ax, 7, y-0.93, 4, y-1.15, GRAY, lw=1.2)
+    arrow(ax, 7, y-0.93, 10, y-1.15, GRAY, lw=1.2)
 
     plt.tight_layout(pad=0.5)
     return fig
 
-# ── Generate both languages ──
+# ── Generate ──
 for lang, subdir in [('cn', '中文版'), ('en', '英文版')]:
     set_font(lang)
     fig = draw_flowchart(lang)
-    for fmt, dpi, ext in [('pdf', None, 'pdf'), ('png', 300, 'png'), ('svg', None, 'svg')]:
-        path = os.path.join(FIG_DIR, subdir, f'figure_flowchart.{ext}')
+    for fmt, dpi in [('pdf', None), ('png', 300), ('svg', None)]:
+        path = os.path.join(FIG_DIR, subdir, f'figure_flowchart.{fmt}')
         fig.savefig(path, dpi=dpi, bbox_inches='tight', facecolor=BG, edgecolor='none')
     plt.close(fig)
-    print(f'{subdir} flowchart saved (PNG+PDF+SVG)')
+    # Also copy to the simpler figures dir used by paper
+    for fmt in ['pdf', 'png', 'svg']:
+        import shutil
+        src = os.path.join(FIG_DIR, subdir, f'figure_flowchart.{fmt}')
+        dst_dir = os.path.join(BASE_DIR, 'figures', subdir)
+        os.makedirs(dst_dir, exist_ok=True)
+        shutil.copy(src, os.path.join(dst_dir, f'figure_flowchart.{fmt}'))
+    print(f'{subdir} done (PDF+PNG+SVG)')
 
 print('Done.')
