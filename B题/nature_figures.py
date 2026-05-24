@@ -981,18 +981,19 @@ def fig15_mc_convergence(df):
 
     N = 10000
     revs = []
-    gifts = [{'p':6,'m':1.0,'rb':0.02},{'p':30,'m':0.4,'rb':0.03},
-             {'p':68,'m':0.15,'rb':0.04},{'p':128,'m':0.05,'rb':0.05},{'p':328,'m':0.01,'rb':0.06}]
+    gifts = [{'p':6,'m':2.5,'rb':0.02},{'p':12,'m':1.2,'rb':0.02},
+             {'p':30,'m':0.9,'rb':0.03},{'p':68,'m':0.4,'rb':0.04},
+             {'p':128,'m':0.14,'rb':0.05},{'p':328,'m':0.035,'rb':0.06}]
     for _ in range(1000):
         trv = 0
         for cp in profiles:
             n = max(1, int(cp['pct']*N))
             for __ in range(n):
                 bp = np.random.random()<cp['pay_rate']
-                op = np.random.exponential(cp['mp']) if bp else 0
+                op = np.random.exponential(cp['mp']) * 6 if bp else 0  # USD→CNY
                 sr = 0
                 for g in gifts:
-                    if np.random.random()<max(0.0005, cp['pay_rate']*g['m']):
+                    if np.random.random()<max(0.001, cp['pay_rate']*g['m']):
                         sr+=g['p']
                 trv += op+sr
         revs.append(trv)

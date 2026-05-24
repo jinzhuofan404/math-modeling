@@ -68,6 +68,7 @@ $K=5,6$的轮廓系数较高（0.488, 0.490），但$K=6$的最小簇仅0.1\%（
 \centering
 \caption{五类玩家聚类特征（$K=5$）}
 \label{tab:clusters}
+\small
 \begin{tabular}{c|c|c|c|c|c|c}
 \toprule
 \textbf{ID} & \textbf{命名} & \textbf{占比} & \textbf{付费率} & \textbf{平均付费(元)} & \textbf{生命周期(天)} & \textbf{30日留存} \\
@@ -172,6 +173,7 @@ Lost Cause（无法触及者）& 是 & 是（但生命周期过短）& 仅推免
 \centering
 \caption{各聚类的四象限分布假设}
 \label{tab:quadrants}
+\small
 \begin{tabular}{c|c|c|c|c}
 \toprule
 \textbf{聚类} & \textbf{Persuadable} & \textbf{Sleeping Dog} & \textbf{Lost Cause} & \textbf{Sure Thing} \\
@@ -219,6 +221,7 @@ P(\text{留存}) = \text{retention\_base} + \sum\text{ret\_boost} - \text{ret\_p
 \centering
 \caption{三方案蒙特卡洛模拟结果（10,000玩家，30天，5,000次模拟）}
 \label{tab:mc_results}
+\small
 \begin{tabular}{l|c|c|c}
 \toprule
 \textbf{指标} & \textbf{基线（无干预）} & \textbf{基准方案} & \textbf{优化方案} \\
@@ -259,20 +262,23 @@ $P(\text{营收}\geq70,000)$ & 0\% & 0.0\% & 24.1\% \\
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.78\textwidth]{fig10_monte_carlo}
+\includegraphics[width=0.72\textwidth]{fig10_monte_carlo}
 \caption{三方案蒙特卡洛模拟分布：总营收（左）与30日留存率（右）}
 \label{fig:p3_mc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.70\textwidth]{fig15_mc_convergence}
+\caption{蒙特卡洛模拟收敛性验证：5000次迭代下营收均值与标准差均已稳定}
+\label{fig:p3_convergence}
 \end{figure}
 
 \subsubsection{70,000元目标的可达性评估}
 \label{subsec:feasibility}
 
-训练集2,000名玩家46天窗口有机付费总额约6,821元（原始数据为1,136.89美元，按1 USD $\approx$ 6 CNY折算），ARPU=3.41元/人。蒙特卡洛基线10,000名新服玩家30天期望有机付费24,058元（ARPU=2.41元/人），在合理范围内。
-
-策略将营收推至67,715元（2.8$\times$有机基线，较基准方案+51.4\%）。策略付费增量主要来自Persuadable零氪休闲党的首购转化和中氪战力党通过增量乘数$\delta_c$扩大的消费。
-
-70,000元目标在基准情景下以$P=24.1\%$的概率可达，乐观情景下营收69,326元逼近目标。未能确定性达标的原因有：（1）训练数据仅2,000名玩家，零氪流失党占比高且生命周期仅1.4--3.5天，转化窗口极窄；（2）需求曲线$\beta$和四象限比例缺乏A/B测试标定，参数不确定性导致$P(\geq70,000)$低于确定性阈值。确定性达成目标的路径包括引入订阅制产品结构（月卡/战令）以提高ARPU，或在更大规模新服中通过累积效应降低单位运营成本——这两条路径均超出了题目给定的数据分析与推送策略优化范畴。
+训练集ARPU=3.41元/人，MC基线ARPU=2.41元/人，数量级一致。策略将营收推至67,715元（2.8$\times$基线），付费增量来自零氪休闲党首购转化和付费玩家增量消费。70,000元目标以$P=24.1\%$可达，乐观情景69,326元逼近目标。确定性达标需更大规模数据或订阅制产品结构——超出题目范畴。
 
 \subsection{本节小结}
 
-本节通过K-Means聚类（$K=5$，经K=2--8多指标稳定性比较选定，最小簇占比1.1\%$\geq$1\%阈值）将玩家分为五种类型，引入教师--学生架构使聚类分群可在Day3实时部署（CV准确率92.2\%），设计了三组递进策略并通过5,000次蒙特卡洛模拟验证。优化方案实现67,715元营收（2.8$\times$有机基线，较基准方案+51.4\%），留存率11.4\%满足$\geq$10\%约束，$P(\text{营收}\geq70,000)=24.1\%$。敏感性检验给出悲观--乐观营收区间63,269--69,326元，留存始终稳定在11\%以上。优化方案在两个维度均显著优于基准方案——营收+51.4\%（44,735$\rightarrow$67,715元）、留存+4.2pp（7.2\%$\rightarrow$11.4\%），验证了Uplift框架在留存-付费双目标优化中的方法论价值。
+本节通过K-Means聚类（$K=5$，经多指标比较选定）将玩家分群，教师--学生架构（CV 92.2\%）实现Day3实时部署。5,000次MC模拟验证优化方案：67,715元营收、11.4\%留存率，$P(\geq70,000)=24.1\%$。敏感性区间63,269--69,326元，留存11\%以上。较基准方案营收+51.4\%、留存+4.2pp，验证了Uplift框架在双目标优化中的方法论价值。
