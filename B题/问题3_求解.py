@@ -108,8 +108,8 @@ def player_clustering(df):
     for i, k in enumerate(K_range):
         print(f'  {k:>4} {silhouettes[i]:>12.4f} {ch_scores[i]:>12.1f} {db_scores[i]:>12.4f} {min_cluster_pcts[i]:>11.1f}%')
 
-    # Select K: prioritize silhouette, penalize tiny clusters (<3%)
-    valid_k = [(i, k, silhouettes[i]) for i, k in enumerate(K_range) if min_cluster_pcts[i] >= 3.0]
+    # Select K: prioritize silhouette, penalize tiny clusters (<1%, ~20 players)
+    valid_k = [(i, k, silhouettes[i]) for i, k in enumerate(K_range) if min_cluster_pcts[i] >= 1.0]
     if valid_k:
         best_i, best_k, _ = max(valid_k, key=lambda x: x[2])
     else:
@@ -396,7 +396,8 @@ def monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists):
 
 
 def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dists,
-                       quadrant_config=None, sens_label='基准'):
+                       quadrant_config=None, sens_label='基准',
+                       lambda_by_name=None, delta_by_name=None):
     """v4 Target scheme: four-quadrant uplift + free retention pack + state triggers.
 
     Quadrants: Persuadable (push), Sure Thing (organic only),
@@ -404,6 +405,9 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
 
     State triggers: lifecycle<3 skip >30¥, whale skip <30¥, post-big-buy skip <68¥.
     Joint decision: each purchase adds ret_boost incrementally.
+
+    lambda_by_name: dict, zero-pay first-purchase conversion baseline per cluster name
+    delta_by_name: dict, paying player uplift multiplier per cluster name
     """
     print('\n' + '=' * 50)
     print(f'3.5 Target Scheme MC v4 [{sens_label}]')
@@ -422,14 +426,16 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
         }
 
     # ── Intervention parameters by cluster NAME ──
-    lambda_by_name = {  # zero-pay: first-purchase conversion baseline
-        "零氪休闲党": 0.25,
-        "零氪流失党": 0.10,
-    }
-    delta_by_name = {   # paying: uplift multiplier on conservative base
-        "中氪战力党": 0.60,
-        "高氪核心党": 0.80,
-    }
+    if lambda_by_name is None:
+        lambda_by_name = {  # zero-pay: first-purchase conversion baseline
+            "零氪休闲党": 0.25,
+            "零氪流失党": 0.10,
+        }
+    if delta_by_name is None:
+        delta_by_name = {   # paying: uplift multiplier on conservative base
+            "中氪战力党": 0.60,
+            "高氪核心党": 0.80,
+        }
 
     # Conservative base probabilities per pack
     con_base = {6: 1.0, 12: 0.5, 30: 0.4, 68: 0.15, 128: 0.05, 328: 0.01, 648: 0.003}
@@ -726,12 +732,16 @@ def main():
     mc_baseline = monte_carlo_baseline(cluster_profiles, df, cl_sizes, cl_dists)
     mc_conservative = monte_carlo_conservative(cluster_profiles, df, cl_sizes, cl_dists)
 
-    # Tuned beta for optimization (lower = less price-sensitive, enables high-price packs)
-    beta_tuned = beta_hat * 0.35  # ≈ 0.023
+    # Tuned parameters (Combo B: conservative uplift, K=5 verified)
+    beta_tuned = beta_hat * 0.30
+    lambda_by_name = {"零氪休闲党": 0.30, "零氪流失党": 0.10}
+    delta_by_name = {"中氪战力党": 0.85, "高氪核心党": 0.80}
 
     # Target scheme: baseline + 2 sensitivity variants
     mc_target_base = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
-                                        cl_sizes, cl_dists, sens_label='基准')
+                                        cl_sizes, cl_dists, sens_label='基准',
+                                        lambda_by_name=lambda_by_name,
+                                        delta_by_name=delta_by_name)
 
     # Sensitivity A: Persuadable比例 -20% (pessimistic)
     quad_pessimistic = {k: [v[0]*0.8, v[1]+v[0]*0.2, v[2], v[3]] for k, v in {
@@ -743,7 +753,9 @@ def main():
     mc_target_pes = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
                                        cl_sizes, cl_dists,
                                        quadrant_config=quad_pessimistic,
-                                       sens_label='悲观')
+                                       sens_label='悲观',
+                                       lambda_by_name=lambda_by_name,
+                                       delta_by_name=delta_by_name)
 
     # Sensitivity B: Persuadable比例 +20% (optimistic)
     quad_optimistic = {k: [min(1.0, v[0]*1.2), max(0, v[1]-v[0]*0.2), v[2], v[3]] for k, v in {
@@ -755,7 +767,9 @@ def main():
     mc_target_opt = monte_carlo_target(cluster_profiles, df, demand, beta_tuned,
                                        cl_sizes, cl_dists,
                                        quadrant_config=quad_optimistic,
-                                       sens_label='乐观')
+                                       sens_label='乐观',
+                                       lambda_by_name=lambda_by_name,
+                                       delta_by_name=delta_by_name)
 
     sched_df = generate_strategy_schedule(cluster_profiles)
 

@@ -581,11 +581,11 @@ def fig9_xgb_importance(df):
 # ═══════════════════════════════════════════════════════════════
 def fig10_monte_carlo(df):
     """Problem 3: Three-scheme MC comparison (baseline / conservative / exploration)."""
-    # Final 5000-MC results (K=4, updated from Q3 run)
+    # Final 5000-MC results (K=5, Combo B params)
     schemes = [
-        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 31280,  'ret': 7.1},
-        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 51886, 'ret': 7.2},
-        {'name_cn': '优化\n(探索)',   'name_en': 'Optimization\n(Exploration)', 'rev': 63043, 'ret': 8.5},
+        {'name_cn': '基线\n(无干预)',   'name_en': 'Baseline\n(No Push)',  'rev': 24058,  'ret': 7.0},
+        {'name_cn': '基准\n(主方案)',   'name_en': 'Benchmark\n(Main)', 'rev': 44735, 'ret': 7.2},
+        {'name_cn': '优化\n(探索)',   'name_en': 'Optimization\n(Exploration)', 'rev': 67715, 'ret': 11.4},
     ]
     colors = [PAL["neutral_dark"], PAL["blue"], PAL["green_dark"]]
     target_rev, target_ret = 70000, 10.0
