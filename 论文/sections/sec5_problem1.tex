@@ -10,11 +10,11 @@
 
 \subsubsection{模型建立}
 
-Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。定义玩家$i$的流失时刻为：
+Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。为全篇统一口径，定义玩家$i$的流失指标基于活跃跨度（lifecycle\_days）：
 \begin{equation}
-T_i = \min\{t \mid \text{玩家}i\text{从第}t\text{天起连续2天无pickdata2行为记录}\}
+T_i = \min(\text{lifecycle\_days}_i,\ 30),\quad \delta_i = \mathbb{I}(\text{lifecycle\_days}_i < 30)
 \end{equation}
-若玩家在30天内从未触发此条件，则按右删失处理（$T_i = 30$, $\delta_i = 0$）。KM估计量为：
+即若玩家首末活跃跨度不足30天则判定为流失事件（$\delta_i=1$），否则在第30天右删失（$\delta_i=0$）。KM估计量为：
 
 \begin{equation}\label{eq:km}
 \hat{S}(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)
@@ -27,13 +27,13 @@ T_i = \min\{t \mid \text{玩家}i\text{从第}t\text{天起连续2天无pickdata
 KM留存曲线如图\ref{fig:p1_km}所示。计算得到各级留存率如下：
 
 \begin{itemize}
-    \item 次日留存率（$R_1$）：\textbf{33.55\%}
-    \item 7日留存率（$R_7$）：\textbf{6.30\%}
-    \item 14日留存率（$R_{14}$）：\textbf{2.65\%}
-    \item 30日留存率（$R_{30}$）：\textbf{0.85\%}
+    \item 次日留存率（$R_1$）：\textbf{42.30\%}
+    \item 7日留存率（$R_7$）：\textbf{22.95\%}
+    \item 14日留存率（$R_{14}$）：\textbf{16.10\%}
+    \item 30日留存率（$R_{30}$）：\textbf{7.05\%}
 \end{itemize}
 
-中位生存时间仅为\textbf{1天}，表明超过半数的玩家在注册后24小时内流失，该游戏面临严重的早期留存危机。
+中位生存时间仅为\textbf{1天}，表明超过半数的玩家在注册后24小时内流失，该游戏面临严重的早期留存危机。30日留存率7.05\%与问题3基线留存率一致，全篇标签口径统一。
 
 \begin{figure}[H]
 \centering
@@ -56,12 +56,12 @@ h(t) = \frac{\text{在}t\text{时刻流失的玩家数}}{\text{在}t\text{时刻
 
 \subsubsection{结果分析}
 
-风险函数图见图\ref{fig:p1_hazard}。分析结果明确显示：
+风险函数图见图\ref{fig:p1_hazard}。活跃跨度分布分析显示：
 
 \begin{itemize}
-    \item \textbf{第2天}是最关键的流失高峰，66.5\%的剩余用户在此流失
-    \item 第3天为次关键节点，流失率为32.6\%
-    \item 第4--5天流失率仍超过25\%，第7天再次出现小高峰
+    \item \textbf{第2天}是生命周期结束的最高峰，57.7\%的玩家活跃跨度仅为1--2天
+    \item 第3天为次高峰，19.9\%的玩家活跃跨度止于2--3天
+    \item 第4--5天活跃跨度终止率仍约9--10\%，此后衰减放缓
 \end{itemize}
 
 这一发现提示运营团队应将最核心的留存干预资源集中在注册后的前48小时内。
@@ -78,8 +78,8 @@ h(t) = \frac{\text{在}t\text{时刻流失的玩家数}}{\text{在}t\text{时刻
 为探究不同玩家群体的留存差异，将玩家按付费状态和联盟参与状态分别进行分层KM分析。结果如图\ref{fig:p1_seg}所示，对比极为显著：
 
 \begin{itemize}
-    \item \textbf{前3天付费玩家} 7日留存率 \textbf{40.6\%} $\quad$ vs $\quad$ \textbf{非付费玩家} 7日留存率 \textbf{5.2\%}（差距7.8倍）
-    \item \textbf{前3天入盟玩家} 7日留存率 \textbf{28.0\%} $\quad$ vs $\quad$ \textbf{未入盟玩家} 7日留存率 \textbf{1.2\%}（差距23倍）
+    \item \textbf{付费玩家} 7日留存率 \textbf{68.0\%} $\quad$ vs $\quad$ \textbf{非付费玩家} 7日留存率 \textbf{21.2\%}（差距3.2倍）
+    \item \textbf{入盟玩家} 7日留存率 \textbf{61.5\%} $\quad$ vs $\quad$ \textbf{未入盟玩家} 7日留存率 \textbf{13.4\%}（差距4.6倍）
 \end{itemize}
 
 Log-rank检验结果表明两组差异均具有高度统计显著性（$p < 0.001$）。这一发现具有重要的策略含义：引导新玩家尽早完成首充并加入联盟，是提升整体留存率的最有效杠杆。
@@ -103,16 +103,26 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 
 其中$h_0(t)$为基准风险函数，$X = (X_1, \ldots, X_k)$为协变量向量，$\beta_k$为回归系数。$\exp(\beta_k) > 1$表示该特征增加流失风险（``风险因子''），$\exp(\beta_k) < 1$表示该特征降低流失风险（``保护因子''）。
 
-选取14个严格限定于前3天的特征：登录天数、第3天等级、等级变化、日均在线时长、各类资源消耗量、钻石/金币余额、是否首充、是否入盟及事件类型数。\textbf{绝对排除}全周期变量（lifecycle\_days、level\_end、total\_pay等），避免预测目标与特征共享未来信息——若使用全周期特征，C-index将被人为拉升至0.9479，产生虚假的高预测精度，本文报告的0.8986是模型真实泛化能力的下限估计。
+选取14个严格限定于前3天的特征：登录天数、第3天等级、等级变化、日均在线时长、各类资源消耗量、钻石/金币余额、是否首充、是否入盟及事件类型数。\textbf{绝对排除}全周期变量（lifecycle\_days、level\_end、total\_pay等），避免预测目标与特征共享未来信息。
 
 \subsubsection{模型训练与评估}
 
 将数据集按7:3分层划分为训练集和测试集。采用惩罚似然估计（penalizer=0.1）降低过拟合风险。模型评估指标：
 
 \begin{itemize}
-    \item 一致性指数（C-index）：\textbf{0.8986}
-    \item 预测平均绝对误差（MAE）：\textbf{1.33天}
+    \item 一致性指数（C-index）：\textbf{0.826}
+    \item 预测平均绝对误差（MAE）：\textbf{4.36天}
 \end{itemize}
+
+\subsubsection{比例风险假设诊断}
+
+Cox模型的前提假设是各协变量的风险比不随时间变化（Proportional Hazards假设）。对拟合后的模型进行PH假设检验（Schoenfeld残差检验），结果显示：\texttt{days\_logged\_d3}（$p=0.0001$）和\texttt{n\_event\_types\_d3}（$p=0.014$）两个协变量显著违背PH假设，其余12个协变量满足PH假设。图\ref{fig:p1_schoenfeld}展示了违背最严重的协变量的Schoenfeld残差图。
+
+PH假设的部分违背提示：登录天数和事件类型数对流失风险的影响可能在早期和晚期有所不同——前3天每天都登录的玩家在短期内的保护效应最强，随时间推移该效应递减。本文保留Cox模型并报告PH诊断结果，原因如下：（1）C-index=0.826表明模型整体排序能力良好；（2）Cox的系数解释性远优于纯非参数替代方案；（3）下文的RSF对照进一步验证了这一选择。
+
+\subsubsection{随机生存森林对照}
+
+为评估模型选择对预测性能的影响，以随机生存森林（Random Survival Forest, RSF）作为非参数对照模型。RSF不依赖于PH假设，通过集成100棵生存树进行预测。在相同训练/测试划分下，RSF取得C-index=\textbf{0.768}，低于Cox的0.826。这一结果并不意外——RSF的完全非参数特性在样本量有限（2000人）时容易过拟合，而Cox的半参数结构在偏差-方差权衡中更优。鉴于Cox在预测力和解释性上的双重优势，本文以Cox为主模型，RSF为对照。
 
 \subsubsection{特征重要性分析}
 
@@ -143,6 +153,13 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{fig12_cox_pred}
-\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.899, MAE=1.33天）}
+\caption{Cox模型预测生存天数vs实际生存天数（C-index=0.826, MAE=4.36天）}
 \label{fig:p1_pred}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{figure_schoenfeld}
+\caption{Schoenfeld残差图：PH假设违背最严重的协变量（days\_logged\_d3）}
+\label{fig:p1_schoenfeld}
 \end{figure}

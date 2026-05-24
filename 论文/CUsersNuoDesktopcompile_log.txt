@@ -1,0 +1,148 @@
+This is XeTeX, Version 3.141592653-2.6-0.999996 (TeX Live 2024) (preloaded format=xelatex)
+ restricted \write18 enabled.
+entering extended mode
+(./main.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-02-20>
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/ctexart.cls
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/config/ctexbackend.cfg)
+(d:/texlive/2024/texmf-dist/tex/latex/l3kernel/expl3.sty
+(d:/texlive/2024/texmf-dist/tex/latex/l3backend/l3backend-xetex.def))
+Document Class: ctexart 2022/07/14 v2.5.10 Chinese adapter for class article (C
+TEX)
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/ctexhook.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/ctexpatch.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/base/fix-cm.sty
+(d:/texlive/2024/texmf-dist/tex/latex/base/ts1enc.def))
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/config/ctexopts.cfg)
+(d:/texlive/2024/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2023/05/17 v1.4n Standard LaTeX document class
+(d:/texlive/2024/texmf-dist/tex/latex/base/size12.clo))
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/engine/ctex-engine-xetex.def
+(d:/texlive/2024/texmf-dist/tex/xelatex/xecjk/xeCJK.sty
+(d:/texlive/2024/texmf-dist/tex/latex/l3packages/xtemplate/xtemplate.sty
+(d:/texlive/2024/texmf-dist/tex/latex/l3packages/xtemplate/xtemplate-2023-10-10
+.sty)) (d:/texlive/2024/texmf-dist/tex/latex/fontspec/fontspec.sty
+(d:/texlive/2024/texmf-dist/tex/latex/l3packages/xparse/xparse.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/fontspec/fontspec-xetex.sty
+(d:/texlive/2024/texmf-dist/tex/latex/base/fontenc.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/fontspec/fontspec.cfg)))
+(d:/texlive/2024/texmf-dist/tex/xelatex/xecjk/xeCJK.cfg)))
+(d:/texlive/2024/texmf-dist/tex/latex/zhnumber/zhnumber.sty
+(d:/texlive/2024/texmf-dist/tex/latex/zhnumber/zhnumber-utf8.cfg))
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/scheme/ctex-scheme-chinese-article.d
+ef (d:/texlive/2024/texmf-dist/tex/latex/ctex/config/ctex-name-utf8.cfg))
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/fontset/ctex-fontset-windows.def))
+(d:/texlive/2024/texmf-dist/tex/latex/ctex/config/ctex.cfg)
+(d:/texlive/2024/texmf-dist/tex/latex/geometry/geometry.sty
+(d:/texlive/2024/texmf-dist/tex/latex/graphics/keyval.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/iftex/ifvtex.sty
+(d:/texlive/2024/texmf-dist/tex/generic/iftex/iftex.sty)))
+(d:/texlive/2024/texmf-dist/tex/latex/amsmath/amsmath.sty
+For additional information on amsmath, use the `?' option.
+(d:/texlive/2024/texmf-dist/tex/latex/amsmath/amstext.sty
+(d:/texlive/2024/texmf-dist/tex/latex/amsmath/amsgen.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/amsmath/amsbsy.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/amsmath/amsopn.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/amsfonts/amssymb.sty
+(d:/texlive/2024/texmf-dist/tex/latex/amsfonts/amsfonts.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/amscls/amsthm.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/graphics/graphicx.sty
+(d:/texlive/2024/texmf-dist/tex/latex/graphics/graphics.sty
+(d:/texlive/2024/texmf-dist/tex/latex/graphics/trig.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/graphics-cfg/graphics.cfg)
+(d:/texlive/2024/texmf-dist/tex/latex/graphics-def/xetex.def)))
+(d:/texlive/2024/texmf-dist/tex/latex/float/float.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/booktabs/booktabs.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/tools/longtable.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/tools/array.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/multirow/multirow.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/xcolor/xcolor.sty
+(d:/texlive/2024/texmf-dist/tex/latex/graphics-cfg/color.cfg)
+(d:/texlive/2024/texmf-dist/tex/latex/graphics/mathcolor.ltx))
+(d:/texlive/2024/texmf-dist/tex/latex/colortbl/colortbl.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/fancyhdr/fancyhdr.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/caption/caption.sty
+(d:/texlive/2024/texmf-dist/tex/latex/caption/caption3.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/caption/ltcaption.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/hyperref/hyperref.sty
+(d:/texlive/2024/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/pdfescape/pdfescape.sty
+(d:/texlive/2024/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty
+(d:/texlive/2024/texmf-dist/tex/generic/infwarerr/infwarerr.sty)))
+(d:/texlive/2024/texmf-dist/tex/latex/hycolor/hycolor.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/auxhook/auxhook.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/hyperref/nameref.sty
+(d:/texlive/2024/texmf-dist/tex/latex/refcount/refcount.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty
+(d:/texlive/2024/texmf-dist/tex/latex/kvoptions/kvoptions.sty)))
+(d:/texlive/2024/texmf-dist/tex/latex/etoolbox/etoolbox.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/hyperref/pd1enc.def)
+(d:/texlive/2024/texmf-dist/tex/generic/intcalc/intcalc.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/hyperref/puenc.def)
+(d:/texlive/2024/texmf-dist/tex/latex/url/url.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/bitset/bitset.sty
+(d:/texlive/2024/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/base/atbegshi-ltx.sty))
+(d:/texlive/2024/texmf-dist/tex/latex/hyperref/hxetex.def
+(d:/texlive/2024/texmf-dist/tex/generic/stringenc/stringenc.sty)
+(d:/texlive/2024/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty
+(d:/texlive/2024/texmf-dist/tex/latex/base/atveryend-ltx.sty)
+(d:/texlive/2024/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty)))
+(./main.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+(./main.out) (./main.out)
+(d:/texlive/2024/texmf-dist/tex/latex/amsfonts/umsa.fd)
+(d:/texlive/2024/texmf-dist/tex/latex/amsfonts/umsb.fd)
+(./sections/sec1_abstract.tex) [1] (./main.toc [1]) [2]
+(./sections/sec2_restate.tex) (./sections/sec3_assumptions.tex)
+(./sections/sec4_notation.tex [3]) (./sections/sec5_problem1.tex [4] [5]
+[6] [7] [8] [9]) (./sections/sec6_problem2.tex [10] [11] [12] [13] [14]
+[15]) (./sections/sec7_problem3.tex
+Overfull \hbox (39.40388pt too wide) in paragraph at lines 10--19
+ [] 
+[16]
+Overfull \hbox (9.68486pt too wide) in paragraph at lines 27--28
+[]\TU/SimSun(0)/m/n/12 采 用 \TU/lmr/m/n/12 K-Means \TU/SimSun(0)/m/n/12 算 法 对 训 
+练 集 \TU/lmr/m/n/12 2,000 \TU/SimSun(0)/m/n/12 名 玩 家 进 行 聚 类。|  选 取 \TU/lmr/m/n/
+12 11 \TU/SimSun(0)/m/n/12 个 聚 类 特 征：| \TU/lmr/m/n/12 days_active\TU/SimSun(0)/
+m/n/12 、|
+
+Overfull \hbox (48.47432pt too wide) in paragraph at lines 27--28
+\TU/lmr/m/n/12 lifecycle_days\TU/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 level_end\T
+U/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 level_growth_rate\TU/SimSun(0)/m/n/12 、| \
+TU/lmr/m/n/12 is_paying\TU/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 total_pay\TU/SimS
+un(0)/m/n/12 、| \TU/lmr/m/n/12 is_in_league\TU/SimSun(0)/m/n/12 、| \TU/lmr/m/n/
+12 vip_level_max\TU/SimSun(0)/m/n/12 、|
+
+Overfull \hbox (5.35005pt too wide) in paragraph at lines 27--28
+\TU/lmr/m/n/12 diamond_median\TU/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 total_get\T
+U/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 total_reduce\TU/SimSun(0)/m/n/12 。|  对 偏 态
+ 分 布 特 征  |（\TU/lmr/m/n/12 total_pay\TU/SimSun(0)/m/n/12 、| \TU/lmr/m/n/12 diam
+ond_median
+[17] [18] [19]
+Overfull \hbox (58.72302pt too wide) in paragraph at lines 137--147
+ [] 
+[20] [21]
+Overfull \hbox (97.11186pt too wide) in paragraph at lines 219--235
+ [][] 
+[22] [23]
+Overfull \hbox (20.42213pt too wide) in paragraph at lines 265--275
+ [] 
+) (./sections/sec8_problem4.tex [24]
+Overfull \hbox (0.75641pt too wide) in paragraph at lines 9--10
+[]\TU/SimSun(0)/b/n/12 理 由：|  \TU/SimSun(0)/m/n/12 问 题 \TU/lmr/m/n/12 1 \TU/Sim
+Sun(0)/m/n/12 的 \TU/lmr/m/n/12 Cox \TU/SimSun(0)/m/n/12 回 归 显 示 \TU/lmr/m/n/12 
+“is_in_league” \TU/SimSun(0)/m/n/12 是 留 存 的 最 强 保 护 因 子 之 一  |（$[]\OT1/cmr/m/n/
+12 (\OML/cmm/m/it/12 ^^L\OT1/cmr/m/n/12 ) =
+[25]) (./sections/sec9_evaluation.tex [26]) (./sections/sec10_references.tex
+[27]) (./sections/sec11_appendix.tex
+Overfull \hbox (122.78271pt too wide) in paragraph at lines 12--22
+ [][] 
+[28] [29]) [30] (./main.aux) )
+(see the transcript file for additional information)
+Output written on main.pdf (31 pages).
+Transcript written on main.log.
