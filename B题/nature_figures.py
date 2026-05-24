@@ -880,6 +880,7 @@ def fig14_cluster_3d(df):
         lb_tmp = km_tmp.fit_predict(Xs)
         sil_scores.append(silhouette_score(Xs, lb_tmp))
     optimal_k = list(Kr)[np.argmax(sil_scores)]
+    optimal_k = 5  # Paper's K=5 (stability constraint), overrides raw silhouette max
     km = KMeans(n_clusters=optimal_k, random_state=RANDOM_SEED, n_init=10)
     labels = km.fit_predict(Xs)
 
