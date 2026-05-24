@@ -2,7 +2,7 @@
 
 \subsection{数据预处理与特征工程}
 
-原始数据由两类文件组成：pickdata1（资源变更记录，33字段）和pickdata2（用户行为事件记录，52字段）。由于数据量庞大（总计约600万行），采用分块读取策略（chunksize=200,000）进行处理。
+原始数据由两类文件组成：pickdata1和pickdata2。由于数据量庞大，采用分块读取策略进行处理。
 
 \textbf{特征窗口约束。}问题1要求基于前3天行为预测30天留存，因此严格限定仅使用第1--3天的数据。Day1定义为玩家注册日期（register\_time），若缺失则以首次pickdata2记录日期替代。提取的14个前3天特征包括：登录天数（days\_logged\_d3）、第3天等级（level\_d3）、等级变化（level\_change\_d3）、日均在线时长（avg\_duration\_d3）、各类资源消耗量（food/wood/stone/diamond/coins\_reduce\_d3）、第3天钻石余额（diamond\_d3）与金币余额（gold\_d3）、是否首充（is\_pay\_d3，由first\_pay\_time $\leq$ Day3判定）、是否入盟（is\_league\_d3）及事件类型数（n\_event\_types\_d3）。\textbf{绝对排除}以下全周期变量以避免未来信息泄漏：lifecycle\_days、level\_end、total\_pay、vip\_level\_max、total\_records、diamond\_median。
 
@@ -115,7 +115,12 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \end{itemize}
 
 \textbf{比例风险假设诊断与模型对照。}显示2个协变量存在时间效应递减（\texttt{days\_logged\_d3}, $p{=}0.0001$; \texttt{n\_event\_types\_d3}, $p{=}0.014$），其余12个满足PH假设。Schoenfeld残差图（图\ref{fig:p1_schoenfeld}）显示违背最严重的协变量残差随时间递减，说明其保护效应在早期最强。本文保留Cox模型——其C-index=0.826排序能力良好且系数解释性优于非参数替代。以随机生存森林（RSF）\cite{ishwaran2008}作对照：RSF的C-index=0.768，低于Cox。在有限样本下Cox的半参数结构具有偏差--方差权衡优势，本文以Cox为主模型、RSF为对照。
-
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{figure_schoenfeld}
+\caption{Schoenfeld残差图：PH假设违背最严重的协变量（days\_logged\_d3）}
+\label{fig:p1_schoenfeld}
+\end{figure}
 \subsubsection{特征重要性分析}
 
 图\ref{fig:p1_cox}展示了各特征的回归系数及其95\%置信区间。主要发现：
@@ -149,9 +154,4 @@ h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
 \label{fig:p1_pred}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.68\textwidth]{figure_schoenfeld}
-\caption{Schoenfeld残差图：PH假设违背最严重的协变量（days\_logged\_d3）}
-\label{fig:p1_schoenfeld}
-\end{figure}
+
