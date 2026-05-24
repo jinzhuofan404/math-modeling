@@ -396,6 +396,7 @@ def fig7_clustering(df):
         km = KMeans(n_clusters=k, random_state=RANDOM_SEED, n_init=10)
         lb = km.fit_predict(Xs); inert.append(km.inertia_); sil.append(silhouette_score(Xs,lb))
     bk = list(Kr)[np.argmax(sil)]
+    bk = 5  # Paper's K=5 (stability constraint)
 
     for lang, fig_dir in LANGS:
         set_cn_font() if lang == 'cn' else set_en_font()
@@ -967,6 +968,7 @@ def fig15_mc_convergence(df):
         lb_tmp = km_tmp.fit_predict(Xs)
         sil_scores.append(silhouette_score(Xs, lb_tmp))
     optimal_k = list(Kr)[np.argmax(sil_scores)]
+    optimal_k = 5  # Paper's K=5 (stability constraint)
     labels = KMeans(n_clusters=optimal_k, random_state=RANDOM_SEED, n_init=10).fit_predict(Xs)
     df['cl'] = labels
 
