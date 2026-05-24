@@ -22,7 +22,7 @@
 
 \subsubsection{聚类方法与命名规则}
 
-采用K-Means算法对训练集2,000名玩家进行聚类。选取11个特征：days\_active、lifecycle\_days、level\_end、level\_growth\_rate、is\_paying、total\_pay、is\_in\_league、vip\_level\_max、diamond\_median、total\_get、total\_reduce。对偏态分布特征（total\_pay、diamond\_median等）进行$\log(1+x)$变换后，StandardScaler标准化至均值0、方差1。
+采用K-Means算法\cite{macqueen1967}对训练集2,000名玩家进行聚类。选取11个特征：days\_active、lifecycle\_days、level\_end、level\_growth\_rate、is\_paying、total\_pay、is\_in\_league、vip\_level\_max、diamond\_median、total\_get、total\_reduce。对偏态分布特征（total\_pay、diamond\_median等）进行$\log(1+x)$变换后，StandardScaler标准化至均值0、方差1。
 
 \subsubsection{聚类数的选择}
 
@@ -205,7 +205,7 @@ Lost Cause（无法触及者）& 是 & 是（但生命周期过短）& 仅推免
 
 \subsubsection{模拟设计}
 
-对三组策略分别进行$N=5,000$次独立蒙特卡洛模拟。每次模拟生成10,000名玩家：按聚类占比抽样，生命周期从各聚类的对数正态分布抽取，有机付费金额从指数分布抽取。策略付费按各方案规则决定，留存判定为：
+对三组策略分别进行$N=5,000$次独立蒙特卡洛模拟\cite{hammersley1964}。每次模拟生成10,000名玩家：按聚类占比抽样，生命周期从各聚类的对数正态分布抽取，有机付费金额从指数分布抽取。策略付费按各方案规则决定，留存判定为：
 
 \begin{equation}
 P(\text{留存}) = \text{retention\_base} + \sum\text{ret\_boost} - \text{ret\_penalty}

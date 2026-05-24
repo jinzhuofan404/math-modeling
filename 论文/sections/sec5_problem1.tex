@@ -10,7 +10,7 @@
 
 \subsubsection{模型建立}
 
-Kaplan-Meier（KM）估计量是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。为全篇统一口径，定义玩家$i$的流失指标基于活跃跨度（lifecycle\_days）：
+Kaplan-Meier（KM）估计量\cite{kaplan1958}是一种非参数方法，用于估计生存函数$S(t)$——即玩家在注册后第$t$天仍然活跃的概率。为全篇统一口径，定义玩家$i$的流失指标基于活跃跨度（lifecycle\_days）：
 \begin{equation}
 T_i = \min(\text{lifecycle\_days}_i,\ 30),\quad \delta_i = \mathbb{I}(\text{lifecycle\_days}_i < 30)
 \end{equation}
@@ -95,7 +95,7 @@ Log-rank检验结果表明两组差异均具有高度统计显著性（$p < 0.00
 
 \subsubsection{模型建立}
 
-为实现基于前3天行为数据的留存天数预测，采用Cox比例风险模型。该模型是半参数模型，不要求指定基准风险函数的具体形式，而是将各协变量的影响建模为对基准风险的乘积效应：
+为实现基于前3天行为数据的留存天数预测，采用Cox比例风险模型\cite{cox1972}。该模型是半参数模型，不要求指定基准风险函数的具体形式，而是将各协变量的影响建模为对基准风险的乘积效应：
 
 \begin{equation}\label{eq:cox}
 h(t \mid X) = h_0(t) \exp(\beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_k X_k)
@@ -122,7 +122,7 @@ PH假设的部分违背提示：登录天数和事件类型数对流失风险的
 
 \subsubsection{随机生存森林对照}
 
-为评估模型选择对预测性能的影响，以随机生存森林（Random Survival Forest, RSF）作为非参数对照模型。RSF不依赖于PH假设，通过集成100棵生存树进行预测。在相同训练/测试划分下，RSF取得C-index=\textbf{0.768}，低于Cox的0.826。这一结果并不意外——RSF的完全非参数特性在样本量有限（2000人）时容易过拟合，而Cox的半参数结构在偏差-方差权衡中更优。鉴于Cox在预测力和解释性上的双重优势，本文以Cox为主模型，RSF为对照。
+为评估模型选择对预测性能的影响，以随机生存森林（Random Survival Forest, RSF）\cite{kleinbaum2012}作为非参数对照模型。RSF不依赖于PH假设，通过集成100棵生存树进行预测。在相同训练/测试划分下，RSF取得C-index=\textbf{0.768}，低于Cox的0.826。这一结果并不意外——RSF的完全非参数特性在样本量有限（2000人）时容易过拟合，而Cox的半参数结构在偏差-方差权衡中更优。鉴于Cox在预测力和解释性上的双重优势，本文以Cox为主模型，RSF为对照。
 
 \subsubsection{特征重要性分析}
 

@@ -147,7 +147,7 @@ P(\text{流失} \mid \text{钻石}) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \cdot 
 题目要求建立回归模型分析影响"总付费金额"的关键因子。直接对全体玩家做回归面临零膨胀问题——96.2\%的玩家付费为0，模型将被零值主导。针对这一数据结构，采用两阶段Hurdle模型\cite{belotti2015twopm}：
 
 \begin{enumerate}
-    \item \textbf{阶段1（参与方程）：}XGBoost二分类，目标$y_1 = \mathbb{I}(\text{total\_pay} > 0)$，全量2000名玩家参与训练。设置$\text{scale\_pos\_weight}=25.4$平衡正负类权重，分层抽样保持训练/测试集正类比例一致。
+    \item \textbf{阶段1（参与方程）：}XGBoost二分类\cite{chen2016}，目标$y_1 = \mathbb{I}(\text{total\_pay} > 0)$，全量2000名玩家参与训练。设置$\text{scale\_pos\_weight}=25.4$平衡正负类权重，分层抽样保持训练/测试集正类比例一致。
     \item \textbf{阶段2（金额方程）：}Gamma GLM with log link，目标为$\mathbb{E}[Y \mid Y>0, X]$，仅在75名付费玩家上训练。模型假设$Y \mid X \sim \text{Gamma}$且$\mathbb{E}[Y \mid X] = \exp(X\beta)$，是处理正偏态连续因变量的标准形式。特征经F检验预筛选（top-5）并剔除共线性对（$|r|>0.9$）后保留3个，StandardScaler标准化后拟合。拟合优度报告\textbf{deviance explained}（偏差解释率）——Gamma分布下传统R$^2$无定义。
 \end{enumerate}
 
@@ -159,7 +159,7 @@ P(\text{流失} \mid \text{钻石}) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 \cdot 
 
 \subsubsection{特征重要性分析}
 
-两阶段揭示了"是否付费"与"付多少"的不同驱动模式。图\ref{fig:p2_shap}展示阶段1 SHAP特征重要性，图\ref{fig:p2_shap2}展示阶段2 Gamma GLM显著系数。
+两阶段揭示了"是否付费"与"付多少"的不同驱动模式。图\ref{fig:p2_shap}展示阶段1 SHAP\cite{lundberg2017}特征重要性，图\ref{fig:p2_shap2}展示阶段2 Gamma GLM显著系数。
 
 \textbf{阶段1——谁更可能付费？} SHAP排名前5的特征为：n\_event\_types（事件类型数）、diamond\_get（钻石获取量）、total\_get（总获取量）、diamond\_flow（钻石净流量）、resource\_intensity（资源消耗强度）。这组特征共同刻画了\textbf{参与广度}——活动参与种类越多、资源获取量越大，接触付费场景的机会越多，首购转化概率越高。
 
