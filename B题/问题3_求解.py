@@ -139,7 +139,9 @@ def player_clustering(df):
 
     # ── Sorting-based naming ──
     # Sort by mean_pay descending; highest paying = 高氪核心党
+    # Zero-pay short-lifecycle clusters sorted by lifecycle: longer→浅层, shorter→流失
     sorted_by_pay = sorted(cluster_profiles, key=lambda x: x['mean_pay'], reverse=True)
+    churn_counter = 0  # distinguish multiple zero-pay short-lifecycle clusters
     for rank, cp in enumerate(sorted_by_pay):
         if cp['mean_pay'] > 0 and rank == 0:
             cp['name_cn'] = '高氪核心党'; cp['name_en'] = 'Whale'
@@ -150,7 +152,11 @@ def player_clustering(df):
         elif cp['mean_lifecycle'] >= 10:
             cp['name_cn'] = '零氪休闲党'; cp['name_en'] = 'F2P Casual'
         else:
-            cp['name_cn'] = '零氪流失党'; cp['name_en'] = 'F2P Churner'
+            churn_counter += 1
+            if churn_counter == 1:  # longer lifecycle among zero-pay short-lifecycle
+                cp['name_cn'] = '零氪浅层党'; cp['name_en'] = 'F2P Shallow'
+            else:
+                cp['name_cn'] = '零氪流失党'; cp['name_en'] = 'F2P Churner'
 
     # Print and save
     for cp in cluster_profiles:
@@ -422,6 +428,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
             "高氪核心党": [0.50, 0.50, 0.00, 0.00],
             "中氪战力党": [0.60, 0.30, 0.10, 0.00],
             "零氪休闲党": [0.70, 0.00, 0.05, 0.25],
+            "零氪浅层党": [0.50, 0.00, 0.05, 0.45],
             "零氪流失党": [0.30, 0.00, 0.05, 0.65],
         }
 
@@ -429,6 +436,7 @@ def monte_carlo_target(cluster_profiles, df, demand, beta_hat, cl_sizes, cl_dist
     if lambda_by_name is None:
         lambda_by_name = {  # zero-pay: first-purchase conversion baseline
             "零氪休闲党": 0.25,
+            "零氪浅层党": 0.10,
             "零氪流失党": 0.10,
         }
     if delta_by_name is None:
@@ -734,7 +742,7 @@ def main():
 
     # Tuned parameters (Combo B: conservative uplift, K=5 verified)
     beta_tuned = beta_hat * 0.30
-    lambda_by_name = {"零氪休闲党": 0.30, "零氪流失党": 0.10}
+    lambda_by_name = {"零氪休闲党": 0.30, "零氪浅层党": 0.10, "零氪流失党": 0.10}
     delta_by_name = {"中氪战力党": 0.85, "高氪核心党": 0.80}
 
     # Target scheme: baseline + 2 sensitivity variants
