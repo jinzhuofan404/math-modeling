@@ -44,7 +44,21 @@ $K$ & Silhouette & CH Index & DB Index & 最小簇占比 \\
 \end{tabular}
 \end{center}
 
-$K=5,6$的轮廓系数较高（0.488, 0.490），但$K=6$的最小簇仅0.1\%（约2人），统计上不可靠。本文以\textbf{最小簇占比$\geq$1\%}为稳定性约束（对应约20名玩家，满足基本的统计描述），选择满足约束下轮廓系数最大的$K=5$（Silhouette=0.488, CH=1093.9, DB=0.928, MinCluster=1.1\%）。图\ref{fig:p3_cluster}和\ref{fig:p3_3d}展示了聚类效果。
+$K=5,6$的轮廓系数较高（0.488, 0.490），但$K=6$的最小簇仅0.1\%（约2人），统计上不可靠。本文以\textbf{最小簇占比$\geq$1\%}为稳定性约束（对应约20名玩家，满足基本的统计描述），选择满足约束下轮廓系数最大的$K=5$（Silhouette=0.488, CH=1093.9, DB=0.928, MinCluster=1.1\%）。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{fig7_clustering}
+\caption{K-Means肘部法则（左）与轮廓系数曲线（右，最佳$K=5$）}
+\label{fig:p3_cluster}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{fig14_cluster_3d}
+\caption{3D聚类可视化：生命周期--对数总付费--最高等级}
+\label{fig:p3_3d}
+\end{figure}
 
 聚类命名基于中心排序规则，按平均付费金额和生命周期两个维度将5个聚类划分为五种策略类型：
 
@@ -83,20 +97,6 @@ C4 & 零氪流失党 & 26.2\% & 0.0\% & 0.00 & 1.4 & 0.4\% \\
 \end{table}
 
 核心发现：约96\%的玩家（C1/C2/C4）30天内从未付费。零氪休闲党（C2, 19.2\%, 生命周期22.2天）、零氪浅层党（C1, 50.6\%, 生命周期3.5天）与零氪流失党（C4, 26.2\%, 生命周期1.4天）构成三级零氪分层，为四象限策略提供了差异化干预空间。K=5相比K=4多分离出一个高氪子群（C0, 1.1\%）和一个零氪浅层子群（C1），虽然C0规模小但具有极高的策略价值。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\textwidth]{fig7_clustering}
-\caption{K-Means肘部法则（左）与轮廓系数曲线（右，最佳$K=5$）}
-\label{fig:p3_cluster}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.7\textwidth]{fig14_cluster_3d}
-\caption{3D聚类可视化：生命周期--对数总付费--最高等级}
-\label{fig:p3_3d}
-\end{figure}
 
 \subsection{早期可部署分群：教师--学生架构}
 
